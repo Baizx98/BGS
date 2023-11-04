@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torch_bgs"
+version = "0.0.1"
+description = "Better Gnn System"
+license = { file = "LICENSE" }
+authors = [{ name = "Bai Zhuoxin" }, { email = "baizx98@qq.com" }]
+readme = "README.md"
+requires-python = ">=3.11"
+[tool.setuptools.packages.find]
+where = ["python"]
