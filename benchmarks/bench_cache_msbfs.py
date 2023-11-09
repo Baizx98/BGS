@@ -95,5 +95,9 @@ def bench_linear_mbfs_on_reddit(new_data=True, world_size=4):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(filename)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     bench_linear_mbfs_on_reddit(new_data=False)
