@@ -1,3 +1,4 @@
+"""测试基于训练集划分算法的缓存策略的性能"""
 import os
 import pickle
 import logging
@@ -37,16 +38,14 @@ def bench_linear_mbfs_on_reddit(new_data=True, world_size=4):
         with open(path, "wb") as file:
             pickle.dump(part_dict, file)
 
-    # Train_mask_dict
-    train_mask_dict = [th.zeros(node_count, dtype=bool) for i in range(world_size)]
-    # 将训练集分区的节点tensor还原成mask表示
-    for i in range(world_size):
-        train_mask_dict[i][part_dict[i]] = True
     # NeighborLoader 为每个GPU生成各自的NeighborLoader，是torch中DataLoader和pyg中NeighborSampler的集成体
     # 每个Neighbor都使用自己分区内的训练节点
     loader_list = [
         NeighborLoader(
-            data, num_neighbors=[25, 10], batch_size=128, input_nodes=train_mask_dict[i]
+            data,
+            num_neighbors=[25, 10],
+            batch_size=1024,
+            input_nodes=part_dict[i],
         )
         for i in range(world_size)
     ]
@@ -100,4 +99,4 @@ if __name__ == "__main__":
         format="%(asctime)s %(filename)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    bench_linear_mbfs_on_reddit(new_data=False)
+    bench_linear_mbfs_on_reddit(new_data=True)
