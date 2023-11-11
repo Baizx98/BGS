@@ -51,8 +51,8 @@ class Cache:
 
 
 class CachePagraph(Cache):
-    def __init__(self, world_size: int) -> None:
-        super().__init__(world_size)
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
 
     def generate_cache(self, csr_graph: CSRGraph):
         """
@@ -72,8 +72,8 @@ class CachePagraph(Cache):
 
 
 class CacheGnnlab(Cache):
-    def __init__(self, world_size: int) -> None:
-        super().__init__(world_size)
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
 
     def generate_cache(
         self,
@@ -112,8 +112,8 @@ class CacheGnnlabPartiton(Cache):
         cache_ratio (float): The ratio of nodes to cache on each GPU.
     """
 
-    def __init__(self, world_size: int) -> None:
-        super().__init__(world_size)
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
 
     def generate_cache(
         self,
