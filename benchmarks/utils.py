@@ -1,7 +1,14 @@
+import os
+import logging
 import torch as th
+import torch_geometric as pyg
+import torch_geometric.datasets as pyg_dataset
 from torch_geometric.loader import NeighborLoader
+from ogb.nodeproppred import PygNodePropPredDataset
 
 from bgs.graph import CSRGraph
+
+logger = logging.getLogger("naive-bench")
 
 
 class Cache:
@@ -29,7 +36,7 @@ class Cache:
         if isinstance(cache_part, th.Tensor):
             cache_part = cache_part.tolist()
         self.cached_ids_list[gpu_id].update(cache_part)
-        print(cache_part[:10])
+        logger.info(str(cache_part[:10]))
 
     def hit_and_access_count(self, gpu_id: int, minibatch: list) -> (int, int):
         """
@@ -46,7 +53,6 @@ class Cache:
             minibatch = minibatch.tolist()
         access_count = len(minibatch)
         hit_count = len(set(minibatch) & self.cached_ids_list[gpu_id])
-        # print(minibatch[:10])
         return hit_count, access_count
 
 
@@ -101,7 +107,7 @@ class CacheGnnlab(Cache):
             self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
 
 
-class CacheGnnlabPartiton(Cache):
+class CacheGnnlabPartition(Cache):
     """
     A class for caching graph nodes on multiple GPUs using GNNLab partitioning strategy.
 
@@ -143,3 +149,26 @@ class CacheGnnlabPartiton(Cache):
         # 设置每个GPU缓存节点的数量
         for gpu_id in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_id, freq_list[gpu_id][:cache_size].tolist())
+
+
+class DatasetCreator:
+    def __init__(self) -> None:
+        pass
+
+    @classmethod
+    def pyg_dataset_creator(
+        cls, dataset_name: str, dataset_path: str
+    ) -> tuple[pyg.data.Data, CSRGraph, th.Tensor]:
+        root = os.path.join(dataset_path, dataset_name)
+        if dataset_name == "Reddit":
+            dataset = pyg_dataset.Reddit(root=root)
+            data = dataset[0]
+            train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+            return data, CSRGraph(data.edge_index), train_ids
+        elif dataset_name == "ogbn-products":
+            dataset = PygNodePropPredDataset(dataset_name, root=dataset_path)
+            data = dataset[0]
+            edge_index = data.edge_index
+            split_idx = dataset.get_idx_split()
+            train_ids = split_idx["train"]
+            return data, CSRGraph(edge_index), train_ids
