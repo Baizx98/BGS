@@ -2,20 +2,30 @@
 import torch as th
 from torch_geometric.datasets import Reddit
 from torch_geometric.loader import NeighborLoader
+from ogb.nodeproppred import PygNodePropPredDataset
 
 from bgs.graph import CSRGraph
 from utils import Cache
 import utils
 
 
-def bench_cache_on_pagraph_and_gnnlab():
+def bench_cache_on_pagraph_and_gnnlab(dataset_name: str):
     """测试pagraph和gnnlab缓存策略命中率的对比，分析其差异"""
-    dataset = Reddit("/home8t/bzx/data/Reddit")
-    data = dataset[0]
-    edge_index = data.edge_index
-    csr_graph = CSRGraph(edge_index)
-    node_count = csr_graph.node_count
-    train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+    if dataset_name == "Reddit":
+        dataset = Reddit("/home8t/bzx/data/Reddit")
+        data = dataset[0]
+        edge_index = data.edge_index
+        csr_graph = CSRGraph(edge_index)
+        node_count = csr_graph.node_count
+        train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+    elif dataset_name == "ogbn-products":
+        dataset = PygNodePropPredDataset(name="ogbn-products", root="/home8t/bzx/data")
+        data = dataset[0]
+        edge_index = data.edge_index
+        csr_graph = CSRGraph(edge_index)
+        node_count = csr_graph.node_count
+        split_idx = dataset.get_idx_split()
+        train_ids = split_idx["train"]
 
     train_ids_list: list[th.Tensor] = train_ids.split(train_ids.shape[0] // 4)
     loader_list = [
@@ -73,4 +83,4 @@ def bench_cache_on_pagraph_and_gnnlab():
 
 
 if __name__ == "__main__":
-    bench_cache_on_pagraph_and_gnnlab()
+    bench_cache_on_pagraph_and_gnnlab("ogbn-products")
