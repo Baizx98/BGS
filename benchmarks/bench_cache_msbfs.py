@@ -32,7 +32,15 @@ def bench_linear_mbfs_on_graph(
     data, csr_graph, train_ids = DatasetCreator.pyg_dataset_creator(
         dataset_name, dataset_root
     )
-    path = "/home8t/bzx/benchmark/train_partition/"+ dataset_name + "_"+partition_policy+"_" + str(world_size) + ".pickle"
+    path = (
+        "/home8t/bzx/benchmark/train_partition/"
+        + dataset_name
+        + "_"
+        + partition_policy
+        + "_"
+        + str(world_size)
+        + ".pickle"
+    )
     os.makedirs(
         os.path.dirname(path), exist_ok=True
     )  # create directory if it doesn't exist
@@ -90,7 +98,7 @@ def bench_linear_mbfs_on_graph(
     hit_ratio_list = [
         hit_count_list[i] / access_count_list[i] for i in range(world_size)
     ]
-    logger.info("Hit ratio list:" hit_ratio_list)
+    logger.info("Hit ratio list:" + str(hit_ratio_list))
 
 
 if __name__ == "__main__":
@@ -127,8 +135,8 @@ if __name__ == "__main__":
     logger.info("cache policy: " + cache_policy)
     logger.info("partition policy: " + partition_policy)
     logger.info("gnn framework: " + gnn_framework)
-    logger.info("repartition: " + str(repartition)
+    logger.info("repartition: " + str(repartition))
 
-    bench_linear_mbfs_on_reddit(repartition=True)
+    bench_linear_mbfs_on_graph(repartition=True)
 
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
