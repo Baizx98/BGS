@@ -179,3 +179,57 @@ class DatasetCreator:
             split_idx = dataset.get_idx_split()
             train_ids = split_idx["train"]
             return data, CSRGraph(edge_index), train_ids
+        elif dataset_name == "livejournal":
+            edge_index = th.load(
+                os.path.join(dataset_path, dataset_name, "edge_index.pt")
+            )
+            CSRGraph(edge_index)
+
+            node_num = edge_index.max() + 1
+            if (
+                os.path.exists(os.path.join(dataset_path, dataset_name, "train.pt"))
+                and os.path.exists(os.path.join(dataset_path, dataset_name, "val.pt"))
+                and os.path.exists(os.path.join(dataset_path, dataset_name, "test.pt"))
+            ):
+                train_mask = th.load(
+                    os.path.join(dataset_path, dataset_name, "train.pt")
+                )
+                val_mask = th.load(os.path.join(dataset_path, dataset_name, "val.pt"))
+                test_mask = th.load(os.path.join(dataset_path, dataset_name, "test.pt"))
+            else:
+                train_mask, val_mask, test_mask = split_nodes(
+                    node_num, dataset_path, dataset_name
+                )
+            data = pyg.data.Data(edge_index=edge_index, num_nodes=node_num)
+            data.train_mask = train_mask
+            train_ids = train_mask.nonzero(as_tuple=False).view(-1)
+            return data, CSRGraph(edge_index), train_ids
+
+
+def split_nodes(
+    node_num: int,
+    dataset_path: str,
+    dataset_name: str,
+    train_ratio: float = 0.65,
+    val_ratio: float = 0.1,
+) -> tuple[th.Tensor, th.Tensor, th.Tensor]:
+    logger.info("splitting nodes for " + dataset_name)
+    nids = th.randperm(node_num)
+    train_len = int(node_num * train_ratio)
+    val_len = int(node_num * val_ratio)
+    test_len = node_num - train_len - val_len
+    # train mask
+    train_mask = th.zeros(node_num, dtype=th.int)
+    train_mask[nids[0:train_len]] = 1
+    # val mask
+    val_mask = th.zeros(node_num, dtype=th.int)
+    val_mask[nids[train_len : train_len + val_len]] = 1
+    # test mask
+    test_mask = th.zeros(node_num, dtype=th.int)
+    test_mask[nids[-test_len:]] = 1
+    # save
+    if dataset_path is not None:
+        th.save(train_mask, os.path.join(dataset_path, "train.pt"))
+        th.save(val_mask, os.path.join(dataset_path, "val.pt"))
+        th.save(test_mask, os.path.join(dataset_path, "test.pt"))
+    return train_mask, val_mask, test_mask
