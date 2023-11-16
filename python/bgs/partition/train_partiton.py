@@ -4,6 +4,7 @@ import random
 import queue
 import collections
 import os.path as osp
+import logging
 
 import torch as th
 import numpy as np
@@ -61,7 +62,7 @@ def linear_msbfs_train_partition(
     # 分层遍历，获取距离字典
     # 保证加入next que的节点都是未被访问过的
     # 每次从now que弹出节点后就设置visited标记
-    # 如果一个节点已经被访问过，那说明其邻居节点已经被加入过next que
+    # ?如果一个节点已经被访问过，那说明其邻居节点已经被加入过next que
     # 访问到一个新节点后，将其没有被访问过的邻居加入next que中
     # 这样可以保证每个新弹出的节点都是未被访问过的，也就不需要再判断并continue
     for i, start_id in enumerate(start_ids):
@@ -93,6 +94,9 @@ def linear_msbfs_train_partition(
                 for neighbor in neighbors_to_next
                 if full_visited[neighbor] == False
             }
+            if len(temp_set) == 0:
+                print("train id count:", train_visited_count)
+                break
             neighbors_to_next.clear()
             neighbors_to_next.update(temp_set)
             # 将未访问的下一层加入next que
@@ -104,6 +108,9 @@ def linear_msbfs_train_partition(
             )
             print("一层遍历结束")
         print("一次遍历结束")
+        if len(temp_set) == 0:
+            print("train id count:", train_visited_count)
+            break
         neighbors_to_next.clear()
 
     # 以上获取到了train node的距离字典
@@ -139,3 +146,98 @@ def linear_msbfs_train_partition(
                 del copy_distance_dict[start]
 
     return partition_dict
+
+
+def linear_msbfs_train_partition_v2(
+    csr_graph: CSRGraph, train_node_ids: th.Tensor, partition_num: int
+) -> dict[int, th.Tensor]:
+    """
+    Partition the training nodes using linear MSBFS algorithm.
+
+    Args:
+        csr_graph: The graph in CSR format.
+        train_node_ids: The ids of training nodes.
+        partition_num: The number of partitions.
+
+    Returns:
+        A dictionary where the key is the partition id and the value is a tensor of node ids in the partition.
+    """
+    partition_dict: dict[int, th.Tensor] = {}
+
+    train_node_num = train_node_ids.shape[0]
+    start_ids = random.sample(range(train_node_num), partition_num)
+    start_ids = train_node_ids[start_ids]
+
+    for i, start_id in enumerate(start_ids):
+        distance = sp_of_ss_by_layer_bfs(csr_graph, train_node_ids, start_id)
+        partition_dict[i] = distance
+
+    # linear partition
+    ave_part_size = train_node_num // partition_num
+    nodes_count_of_partition = [0] * partition_num
+    copy_distance_dict = partition_dict.copy()
+    for train_id in train_node_ids:
+        start = min(copy_distance_dict, key=lambda x: copy_distance_dict[x][train_id])
+        part_id = start_ids[start]
+        partition_dict[part_id].append(train_id)
+        nodes_count_of_partition[part_id] += 1
+        if nodes_count_of_partition[part_id] >= ave_part_size:
+            if len(copy_distance_dict) > 1:
+                del copy_distance_dict[start]
+    return partition_dict
+
+
+def sp_of_ss_by_layer_bfs(
+    csr_graph: CSRGraph, train_node_ids: th.tensor, start: th.tensor
+):
+    """使用层次BFS求单源最短路径"""
+    logger = logging.getLogger("partition")
+    train_node_num = train_node_ids.shape[0]
+    train_mask = th.zeros(csr_graph.node_count, dtype=bool)
+    train_mask[train_node_ids] = True
+    full_visited = th.zeros(csr_graph.node_count, dtype=bool)
+    start_distance = th.zeros(csr_graph.node_count, dtype=int)
+    start_distance.fill_(float("inf"))
+    layer = 0
+    start_distance[start] = 0
+    train_visited_count = 1
+    full_visited[start.item()] = True
+    q = collections.deque()
+    q.extend([start.item()])
+    while q:
+        layer_node_num = len(q)
+        layer += 1
+        print("layer:", layer)
+        neighbors_set = set()
+        for _ in range(layer_node_num):
+            # nid is a int type
+            nid = q.popleft()
+            neighbors = csr_graph.out_neighbors(nid)  # pass nid argument
+            neighbors_set.update(neighbors.tolist())
+        for neighbor in neighbors_set:
+            if full_visited[neighbor] == False:
+                full_visited[neighbor] = True
+                if train_mask[neighbor]:
+                    train_visited_count += 1
+                    start_distance[neighbor] = layer
+                q.append(neighbor)
+        if train_visited_count >= train_node_num:
+            logger.info("遍历完所有训练节点")
+            logger.info("训练节点数：" + str(train_node_num))
+            logger.info("访问训练节点数：" + str(train_visited_count))
+            logger.info(
+                "访问全部节点数：" + str(full_visited.nonzero(as_tuple=False).view(-1).shape[0])
+            )
+            break
+        elif not q:
+            logger.info("遍历完所有节点")
+            logger.info("训练节点数：" + str(train_node_num))
+            logger.info("访问训练节点数：" + str(train_visited_count))
+            logger.info(
+                "访问全部节点数：" + str(full_visited.nonzero(as_tuple=False).view(-1).shape[0])
+            )
+            break
+        else:
+            pass
+
+    return start_distance
