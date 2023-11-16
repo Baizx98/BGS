@@ -44,9 +44,8 @@ class CSRGraph:
     def edge_count(self):
         return self._indices.shape[0]
 
-    @property
     def out_neighbors(self, nid: th.Tensor) -> th.Tensor:
-        return self.indices[self._indptr[nid] : self.indptr[nid + 1]]
+        return self.indices[self._indptr[nid] : self._indptr[nid + 1]]
 
     def share_memory(self):
         self._indptr.share_memory_()
