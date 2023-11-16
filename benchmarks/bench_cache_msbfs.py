@@ -64,7 +64,7 @@ def bench_linear_mbfs_on_graph(
     loader_list = [
         NeighborLoader(
             data,
-            num_neighbors=[25, 10],
+            num_neighbors=num_neighbors,
             batch_size=batch_size,
             input_nodes=part_dict[i],
         )
@@ -137,6 +137,16 @@ if __name__ == "__main__":
     logger.info("gnn framework: " + gnn_framework)
     logger.info("repartition: " + str(repartition))
 
-    bench_linear_mbfs_on_graph(repartition=True)
+    bench_linear_mbfs_on_graph(
+        dataset_name=dataset_name,
+        world_size=world_size,
+        batch_size=batch_size,
+        num_neighbors=num_neighbors,
+        cache_ratio=cache_ratio,
+        cache_policy=cache_policy,
+        partition_policy=partition_policy,
+        gnn_framework=gnn_framework,
+        repartition=True,
+    )
 
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
