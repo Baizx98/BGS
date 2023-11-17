@@ -162,7 +162,8 @@ def linear_msbfs_train_partition_v2(
     Returns:
         A dictionary where the key is the partition id and the value is a tensor of node ids in the partition.
     """
-    partition_dict: dict[int, th.Tensor] = {}
+    partition_dict: dict[int, list] = {i: [] for i in range(partition_num)}
+    distance_dict: dict[int, th.Tensor] = {}
 
     train_node_num = train_node_ids.shape[0]
     start_ids = random.sample(range(train_node_num), partition_num)
@@ -170,20 +171,21 @@ def linear_msbfs_train_partition_v2(
 
     for i, start_id in enumerate(start_ids):
         distance = sp_of_ss_by_layer_bfs(csr_graph, train_node_ids, start_id)
-        partition_dict[i] = distance
+        distance_dict[i] = distance
 
     # linear partition
     ave_part_size = train_node_num // partition_num
     nodes_count_of_partition = [0] * partition_num
-    copy_distance_dict = partition_dict.copy()
+    copy_distance_dict = distance_dict.copy()
     for train_id in train_node_ids:
-        start = min(copy_distance_dict, key=lambda x: copy_distance_dict[x][train_id])
-        part_id = start_ids[start]
-        partition_dict[part_id].append(train_id)
-        nodes_count_of_partition[part_id] += 1
-        if nodes_count_of_partition[part_id] >= ave_part_size:
+        start_index = min(
+            copy_distance_dict, key=lambda x: copy_distance_dict[x][train_id]
+        )
+        partition_dict[start_index].append(train_id)
+        nodes_count_of_partition[start_index] += 1
+        if nodes_count_of_partition[start_index] >= ave_part_size:
             if len(copy_distance_dict) > 1:
-                del copy_distance_dict[start]
+                del copy_distance_dict[start_index]
     return partition_dict
 
 
@@ -197,7 +199,7 @@ def sp_of_ss_by_layer_bfs(
     train_mask[train_node_ids] = True
     full_visited = th.zeros(csr_graph.node_count, dtype=bool)
     start_distance = th.zeros(csr_graph.node_count, dtype=int)
-    start_distance.fill_(float("inf"))
+    start_distance.fill_(10000000)
     layer = 0
     start_distance[start] = 0
     train_visited_count = 1
