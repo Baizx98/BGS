@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.datasets.reddit import Reddit
 from torch_geometric.loader import NeighborLoader
 
-from bgs.partition import train_partiton
+from bgs.partition import train_partition
 from bgs.graph import CSRGraph
 
 from utils import Cache

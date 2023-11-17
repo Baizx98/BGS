@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch_geometric.datasets.reddit import Reddit
 from torch_geometric.loader import NeighborLoader
 
-from bgs.partition import train_partiton
+from bgs.partition import train_partition
 from bgs.graph import CSRGraph
 
 from utils import Cache
@@ -51,7 +51,11 @@ def bench_linear_mbfs_on_graph(
             logging.info("load partition successfully")
     else:
         if partition_policy == "linear_msbfs":
-            part_dict = train_partiton.linear_msbfs_train_partition(
+            part_dict = train_partition.linear_msbfs_train_partition(
+                csr_graph, train_ids, world_size
+            )
+        elif partition_policy == "linear_msbfs_v2":
+            part_dict = train_partition.linear_msbfs_train_partition_v2(
                 csr_graph, train_ids, world_size
             )
         else:
@@ -116,13 +120,13 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "ogbn-products"
+    dataset_name = "livejournal"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
     cache_ratio = 0.1
     cache_policy = "GnnLab-partition"
-    partition_policy = "linear_msbfs"
+    partition_policy = "linear_msbfs_v2"
     gnn_framework = "pyg"
     repartition = True
 
