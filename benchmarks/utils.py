@@ -82,6 +82,7 @@ class CachePagraph(Cache):
         sorted_nid = th.argsort(out_degrees, descending=True)
         for gpu_id in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
+        return sorted_nid
 
 
 class CacheGnnlab(Cache):
@@ -112,6 +113,7 @@ class CacheGnnlab(Cache):
         sorted_nid = th.argsort(freq, descending=True)
         for gpu_id in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
+        return sorted_nid
 
 
 class CacheGnnlabPartition(Cache):
