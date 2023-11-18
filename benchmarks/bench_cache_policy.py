@@ -168,4 +168,4 @@ def bench_cache_hit_ratio(dataset_name: str):
 if __name__ == "__main__":
     # bench_cache_on_pagraph_and_gnnlab("ogbn-products")
     # bench_cache_hit_ratio("Reddit")
-    bench_cahche_hit_ratio_diff("livejournal")
+    bench_cahche_hit_ratio_diff("ogbn-products")
