@@ -47,6 +47,9 @@ class CSRGraph:
     def out_neighbors(self, nid: th.Tensor) -> th.Tensor:
         return self.indices[self._indptr[nid] : self._indptr[nid + 1]]
 
+    def out_degree(self, nid: th.Tensor) -> int:
+        return self.out_degrees[nid].item()
+
     def share_memory(self):
         self._indptr.share_memory_()
         self._indices.share_memory_()
