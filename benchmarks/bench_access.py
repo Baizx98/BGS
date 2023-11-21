@@ -15,7 +15,7 @@ def bench_access_hitmap(dataset_name: str, num_neighbors: list[int], batch_size:
     data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
         dataset_name, root
     )
-    logger.info("bench access hitmap on " + dataset_name)
+    logger.info("bench access hitmap on " + dataset_name + "_" + str(batch_size))
     # 使用一个GPU进行训练，也就是使用一个NeighborLoader来从完成的训练集中获取每个batch的采样结果
     loader = pyg.loader.NeighborLoader(
         data,
@@ -30,12 +30,37 @@ def bench_access_hitmap(dataset_name: str, num_neighbors: list[int], batch_size:
     col = []  # 访问名次
     raw = []  # 节点id
     for i, minibatch in enumerate(loader):
-        n_id = minibatch.n_id
+        n_id = minibatch.n_id.tolist()
+        for j in range(len(n_id)):
+            col.append(i)
+            raw.append(n_id[j])
+    # 绘制散点图，col为点的列坐标，raw为点的横坐标，col和row是列表
+    plt.scatter(col, raw, s=0.1)
+    plt.savefig(f"img/access_hitmap_{dataset_name}_{batch_size}.png")
 
 
-# 训练节点的二阶邻居全采样占全图节点的比例
-def bench_2hop_ratio(dataset_name: str, num_neighbors: list[int], batch_size: int):
-    pass
+# 训练节点的K阶邻居全采样占全图节点的比例
+def bench_khop_ratio(dataset_name: str, num_neighbors: list[int], batch_size: int):
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    loader = pyg.loader.NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        batch_size=batch_size,
+        input_nodes=train_ids,
+        shuffle=True,
+        num_workers=4,
+        persistent_workers=True,
+    )
+    k = len(num_neighbors)
+    pbar = tqdm(total=train_ids.shape[0])
+    node_access = set()
+    for minibatch in loader:
+        node_access.update(minibatch.n_id.tolist())
+        pbar.update(batch_size)
+    ratio = len(node_access) / csr_graph.node_count
+    logger.info(f"{dataset_name}-{k}-hop ratio: {ratio}")
 
 
 # 相邻两个batch的采样子图的节点重合率
@@ -80,7 +105,28 @@ def bench_two_batch_overlap(
 def bench_access_frequency(
     dataset_name: str, num_neighbors: list[int], batch_size: int
 ):
-    pass
+    logger.info("bench access frequency on " + dataset_name)
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    loader = pyg.loader.NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        batch_size=batch_size,
+        input_nodes=train_ids,
+        shuffle=True,
+        num_workers=4,
+        persistent_workers=True,
+    )
+    freq = th.zeros(csr_graph.node_count)
+    pbar = tqdm(total=train_ids.shape[0])
+    for minibatch in loader:
+        freq[minibatch.n_id] += 1
+        pbar.update(batch_size)
+    pbar.close()
+    # 绘制直方图
+    plt.hist(freq.tolist(), bins=100)
+    plt.savefig(f"img/access_frequency_{dataset_name}_{batch_size}.png")
 
 
 # 节点访问频率的分布图（对数坐标）
@@ -98,10 +144,27 @@ def bench_train_neighbor_degree_distribution(
 
 
 # 训练节点的度分布
-def bench_train_node_degree_distribution(
-    dataset_name: str, num_neighbors: list[int], batch_size: int
-):
-    pass
+def bench_train_node_degree_distribution(dataset_name: str):
+    logger.info("bench train node degree distribution on " + dataset_name)
+    _, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    degrees = csr_graph.out_degrees[train_ids].tolist()
+    # 绘制直方图
+    plt.hist(degrees, bins=100)
+    plt.savefig(f"img/train_node_degree_distribution_{dataset_name}.png")
+    plt.clf()  # Clear the current figure
+
+    # 绘制前x%的节点的度之和占全部节点的度之和的比例，横坐标为节点数的百分比，纵坐标为度之和的百分比
+    degrees.sort(reverse=True)
+    total_degree = sum(degrees)
+    x = []
+    y = []
+    for i in range(1, 101):
+        x.append(i)
+        y.append(sum(degrees[: int(i * len(degrees) / 100)]) / total_degree)
+    plt.plot(x, y)
+    plt.savefig(f"img/train_node_degree_distribution_{dataset_name}_ratio.png")
 
 
 if __name__ == "__main__":
@@ -119,7 +182,13 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     logger.info("-" * 20 + "benchmark setup" + "-" * 20)
-    bench_two_batch_overlap(
-        dataset_name="livejournal", num_neighbors=[25, 10], batch_size=6000
-    )
+    # bench_two_batch_overlap(
+    #     dataset_name="livejournal", num_neighbors=[25, 10], batch_size=6000
+    # )
+    # bench_khop_ratio(
+    #     dataset_name="ogbn-products", num_neighbors=[-1, -1], batch_size=1024
+    # )
+    # bench_access_hitmap("Reddit", [25, 10], 6000)
+    # bench_train_node_degree_distribution("ogbn-products")
+    bench_access_frequency("Reddit", [25, 10], 1024)
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
