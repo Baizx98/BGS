@@ -78,7 +78,17 @@ def test_sp_ss_by_layer_bfs_on_ogbn_papers100M():
     print(distance[:200])
 
 
+def test_combined_msbfs_train_partition():
+    dataset = Reddit("/home8t/bzx/data/Reddit/")
+    data = dataset[0]
+    edge_index = data.edge_index
+    csr_graph = CSRGraph(edge_index)
+    train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+    dic = train_partition.combined_msbfs_train_partition(csr_graph, train_ids, 4)
+
+
 if __name__ == "__main__":
-    test_sp_ss_by_layer_bfs_on_reddit()
+    # test_sp_ss_by_layer_bfs_on_reddit()
     # test_sp_ss_by_layer_bfs_on_ogbn_products()
     # test_sp_ss_by_layer_bfs_on_ogbn_papers100M()
+    test_combined_msbfs_train_partition()

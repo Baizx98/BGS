@@ -190,8 +190,12 @@ def linear_msbfs_train_partition_v2(
 
 
 def sp_of_ss_by_layer_bfs(
-    csr_graph: CSRGraph, train_node_ids: th.tensor, start: th.tensor
-):
+    csr_graph: CSRGraph,
+    train_node_ids: th.tensor,
+    start: th.tensor,
+    access_ratio: float = 1.0,
+    inf=10000000,
+) -> th.Tensor:
     """使用层次BFS求单源最短路径"""
     logger = logging.getLogger("partition")
     train_node_num = train_node_ids.shape[0]
@@ -199,7 +203,7 @@ def sp_of_ss_by_layer_bfs(
     train_mask[train_node_ids] = True
     full_visited = th.zeros(csr_graph.node_count, dtype=bool)
     start_distance = th.zeros(csr_graph.node_count, dtype=int)
-    start_distance.fill_(10000000)
+    start_distance.fill_(inf)
     layer = 0
     start_distance[start] = 0
     train_visited_count = 1
@@ -223,8 +227,8 @@ def sp_of_ss_by_layer_bfs(
                     train_visited_count += 1
                     start_distance[neighbor] = layer
                 q.append(neighbor)
-        if train_visited_count >= train_node_num:
-            logger.info("遍历完所有训练节点")
+        if train_visited_count >= train_node_num * access_ratio:
+            logger.info(f"遍历完{access_ratio*100}%训练节点")
             logger.info("训练节点数：" + str(train_node_num))
             logger.info("访问训练节点数：" + str(train_visited_count))
             logger.info(
@@ -243,3 +247,57 @@ def sp_of_ss_by_layer_bfs(
             pass
 
     return start_distance
+
+
+def combined_msbfs_train_partition(
+    csr_graph: CSRGraph, train_node_ids: th.Tensor, partition_num: int
+) -> dict[int, list]:
+    """结合pagraph的多源BFS训练集划分算法，将拓扑上距离更近的训练节点放在一个分区专供特定的GPU训练从而提高数据局部性"""
+    # 首先使用bfs快速得到每个分区的初始初始分区，然后使用pagraph的算法进行后续的划分
+    pass
+    partition_dict: dict[int, list] = {i: [] for i in range(partition_num)}
+    distance_dict: dict[int, th.Tensor] = {}
+    train_node_num = train_node_ids.shape[0]
+    start_ids_index = random.sample(range(train_node_num), partition_num)
+    start_ids = train_node_ids[start_ids_index]
+    for i, start_id in enumerate(start_ids):
+        print("msbfs start id:", start_id)
+        distance = sp_of_ss_by_layer_bfs(
+            csr_graph,
+            train_node_ids,
+            start_id,
+            access_ratio=1.0 / partition_num,  # 此处的比例需要修改
+            inf=10000000,
+        )
+        distance_dict[i] = distance
+    # orgin partition linear partition
+    ave_part_size = train_node_num // partition_num
+    nodes_count_of_partition = [0] * partition_num
+    copy_distance_dict = distance_dict.copy()
+    print("linear partition")
+    for train_id in train_node_ids:
+        start_index = min(
+            copy_distance_dict, key=lambda x: copy_distance_dict[x][train_id]
+        )
+        if copy_distance_dict[start_index][train_id] == 10000000:
+            continue
+        else:
+            # 除了距离的第二种指标，还可以考虑度
+            # 获取距离该训练节点最近的种子节点的字典索引
+            min_distance_index = [
+                key
+                for key in copy_distance_dict.keys()
+                if copy_distance_dict[key][train_id]
+                == copy_distance_dict[start_index][train_id]
+            ]
+            start_index = min(
+                min_distance_index, key=lambda x: nodes_count_of_partition[x]
+            )
+        partition_dict[start_index].append(train_id)
+        nodes_count_of_partition[start_index] += 1
+        if nodes_count_of_partition[start_index] >= ave_part_size:
+            if len(copy_distance_dict) > 1:
+                del copy_distance_dict[start_index]
+    print("nodes_count_of_partition:", nodes_count_of_partition)
+    print("ave_part_size:", ave_part_size)
+    print("train_node_count:", train_node_num)
