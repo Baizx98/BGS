@@ -140,7 +140,30 @@ def bench_access_frequency_log(
 def bench_train_neighbor_degree_distribution(
     dataset_name: str, num_neighbors: list[int], batch_size: int
 ):
-    pass
+    logger.info("bench train neighbor degree distribution on " + dataset_name)
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    loader = pyg.loader.NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        batch_size=batch_size,
+        input_nodes=train_ids,
+        shuffle=True,
+        num_workers=4,
+        persistent_workers=True,
+    )
+    neighbors_set = set()
+    for minibatch in loader:
+        neighbors_set.update(minibatch.n_id.tolist())
+    neighbors_set = neighbors_set - set(train_ids.tolist())
+    neighbors_ids = th.tensor(list(neighbors_set))
+    neighbors_degrees = csr_graph.out_degrees[neighbors_ids].tolist()
+    # 绘制直方图
+    plt.hist(neighbors_degrees, bins=100)
+    plt.savefig(
+        f"img/train_neighbor_degree_distribution_{dataset_name}_{len(num_neighbors)}-hop.png"
+    )
 
 
 # 训练节点的度分布
@@ -167,6 +190,43 @@ def bench_train_node_degree_distribution(dataset_name: str):
     plt.savefig(f"img/train_node_degree_distribution_{dataset_name}_ratio.png")
 
 
+def degree_freq_rank(dataset_name: str, num_neighbors: list[int], batch_size: int):
+    logger.info(f"bench degree frequency rank on {dataset_name}")
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    loader = pyg.loader.NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        batch_size=batch_size,
+        input_nodes=train_ids,
+        shuffle=True,
+        num_workers=4,
+        persistent_workers=True,
+    )
+    freq = th.zeros(csr_graph.node_count)
+    degree = csr_graph.out_degrees
+    pbar = tqdm(total=train_ids.shape[0])
+    for minibatch in loader:
+        freq[minibatch.n_id] += 1
+        pbar.update(batch_size)
+    pbar.close()
+    degree_sorted_index = th.argsort(degree, descending=True)
+    freq_sorted_index = th.argsort(freq, descending=True)
+    degree_rank = th.zeros(csr_graph.node_count, dtype=th.int64)
+    freq_rank = th.zeros(csr_graph.node_count, dtype=th.int64)
+    degree_rank[degree_sorted_index] = th.arange(csr_graph.node_count)
+    degree_rank = degree_rank.tolist()
+    freq_rank[freq_sorted_index] = th.arange(csr_graph.node_count)
+    freq_rank = freq_rank.tolist()
+    sum_loss = 0
+    for i in range(csr_graph.node_count):
+        sum_loss += abs(degree_rank[i] - freq_rank[i])
+    logger.info(f"sum_loss: {sum_loss}")
+    ave_loss = sum_loss / csr_graph.node_count
+    logger.info(f"ave_loss: {ave_loss}")
+
+
 if __name__ == "__main__":
     # logging setup
     logger = logging.getLogger("access-bench")
@@ -190,5 +250,7 @@ if __name__ == "__main__":
     # )
     # bench_access_hitmap("Reddit", [25, 10], 6000)
     # bench_train_node_degree_distribution("ogbn-products")
-    bench_access_frequency("Reddit", [25, 10], 1024)
+    # bench_access_frequency("Reddit", [25, 10], 1024)
+    # bench_train_neighbor_degree_distribution("livejournal", [-1], 1024)
+    degree_freq_rank("livejournal", [25, 10], 1024)
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
