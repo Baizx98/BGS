@@ -293,7 +293,7 @@ def combined_msbfs_train_partition(
             start_index = min(
                 min_distance_index, key=lambda x: nodes_count_of_partition[x]
             )
-        partition_dict[start_index].append(train_id)
+        partition_dict[start_index].append(train_id.item())
         nodes_count_of_partition[start_index] += 1
         if nodes_count_of_partition[start_index] >= ave_part_size:
             if len(copy_distance_dict) > 1:
@@ -301,3 +301,37 @@ def combined_msbfs_train_partition(
     print("nodes_count_of_partition:", nodes_count_of_partition)
     print("ave_part_size:", ave_part_size)
     print("train_node_count:", train_node_num)
+    # 维护每个分区的训练节点的全量采样邻居节点，对于未处理的训练节点，对比其全量采样邻居节点和分区内训练节点的全量采样邻居节点的重合度，将其加入重合度高的分区
+    # 同时，添加一个负载均衡因子，使得每个分区的训练节点数都尽可能相等
+    # TODO 负载均衡因子的计算方式需要修改
+    partition_neighbors_set_dict: dict[int, set] = {
+        i: set() for i in range(partition_num)
+    }
+    # 得到初始分区的全量采样邻居节点（训练节点的邻居节点）
+    for i in range(partition_num):
+        for train_id in partition_dict[i]:
+            partition_neighbors_set_dict[i].update(
+                csr_graph.out_neighbors(train_id).tolist()
+            )
+    # 获取未分区的训练节点
+    partition_train_ids = set()
+    for _, value in partition_dict.items():
+        partition_train_ids.update(value)
+    print("partition train ids:", len(partition_train_ids))
+    unpartition_train_ids = set(train_node_ids.tolist()) - partition_train_ids
+    print("unpartition train ids:", len(unpartition_train_ids))
+    score_list: list = [0] * partition_num
+    for train_id in unpartition_train_ids:
+        # 获取该训练节点的全量采样邻居节点
+        train_neighbors_set = set(csr_graph.out_neighbors(train_id).tolist())
+        for i in range(partition_num):
+            # score公式计算，score=交点数量*（分区平均节点数-分区当前节点数）
+            score_list[i] = len(
+                train_neighbors_set & partition_neighbors_set_dict[i]
+            ) * (ave_part_size - nodes_count_of_partition[i])
+        max_score_index = score_list.index(max(score_list))  # 分区id
+        partition_dict[max_score_index].append(train_id)
+        nodes_count_of_partition[max_score_index] += 1
+        partition_neighbors_set_dict[max_score_index].update(train_neighbors_set)
+    print("nodes_count_of_partition:", nodes_count_of_partition)
+    return partition_dict
