@@ -193,7 +193,9 @@ def sp_of_ss_by_layer_bfs(
     csr_graph: CSRGraph,
     train_node_ids: th.tensor,
     start: th.tensor,
-    access_ratio: float = 1.0,
+    train_access_ratio: float = 1.0,
+    full_access_ratio: float = 1.0,
+    layer_limit: int = 100,
     inf=10000000,
 ) -> th.Tensor:
     """使用层次BFS求单源最短路径"""
@@ -208,11 +210,16 @@ def sp_of_ss_by_layer_bfs(
     start_distance[start] = 0
     train_visited_count = 1
     full_visited[start.item()] = True
+    full_visited_count = 1
     q = collections.deque()
     q.extend([start.item()])
+    break_flag = False
     while q:
-        layer_node_num = len(q)
         layer += 1
+        if layer > layer_limit:
+            logger.info("到达层数限制")
+            break
+        layer_node_num = len(q)
         print("layer:", layer)
         neighbors_set = set()
         for _ in range(layer_node_num):
@@ -223,25 +230,30 @@ def sp_of_ss_by_layer_bfs(
         for neighbor in neighbors_set:
             if full_visited[neighbor] == False:
                 full_visited[neighbor] = True
+                full_visited_count += 1
                 if train_mask[neighbor]:
-                    train_visited_count += 1
                     start_distance[neighbor] = layer
+                    train_visited_count += 1
+                    if (
+                        train_visited_count >= train_node_num * train_access_ratio
+                        or full_visited_count
+                        >= csr_graph.node_count * full_access_ratio
+                    ):
+                        break_flag = True
+                        break
                 q.append(neighbor)
-        if train_visited_count >= train_node_num * access_ratio:
-            logger.info(f"遍历完{access_ratio*100}%训练节点")
+        if break_flag:
+            logger.info("访问节点数达到阈值")
+            logger.info(f"遍历完{train_access_ratio*100}%训练节点")
             logger.info("训练节点数：" + str(train_node_num))
             logger.info("访问训练节点数：" + str(train_visited_count))
-            logger.info(
-                "访问全部节点数：" + str(full_visited.nonzero(as_tuple=False).view(-1).shape[0])
-            )
+            logger.info(f"访问全部节点数：{full_visited_count}")
             break
         elif not q:
-            logger.info("遍历完所有节点")
+            logger.info("遍历完连通图")
             logger.info("训练节点数：" + str(train_node_num))
             logger.info("访问训练节点数：" + str(train_visited_count))
-            logger.info(
-                "访问全部节点数：" + str(full_visited.nonzero(as_tuple=False).view(-1).shape[0])
-            )
+            logger.info(f"访问全部节点数：{full_visited_count}")
             break
         else:
             pass
@@ -266,7 +278,8 @@ def combined_msbfs_train_partition(
             csr_graph,
             train_node_ids,
             start_id,
-            access_ratio=1.0 / partition_num,  # 此处的比例需要修改
+            train_access_ratio=1.0 / partition_num,  # 此处的比例需要修改
+            full_access_ratio=0.5 / partition_num,
             inf=10000000,
         )
         distance_dict[i] = distance
