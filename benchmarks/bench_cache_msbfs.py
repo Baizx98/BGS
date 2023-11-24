@@ -58,6 +58,10 @@ def bench_linear_mbfs_on_graph(
             part_dict = train_partition.linear_msbfs_train_partition_v2(
                 csr_graph, train_ids, world_size
             )
+        elif partition_policy == "combined_msbfs":
+            part_dict = train_partition.combined_msbfs_train_partition(
+                csr_graph, train_ids, world_size
+            )
         else:
             raise NotImplementedError
         with open(path, "wb") as file:
@@ -120,13 +124,13 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "livejournal"
+    dataset_name = "ogbn-products"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
     cache_ratio = 0.1
     cache_policy = "GnnLab-partition"
-    partition_policy = "linear_msbfs_v2"
+    partition_policy = "combined_msbfs"
     gnn_framework = "pyg"
     repartition = True
 

@@ -84,11 +84,17 @@ def test_combined_msbfs_train_partition():
     edge_index = data.edge_index
     csr_graph = CSRGraph(edge_index)
     train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+    s = time.time()
     dic = train_partition.combined_msbfs_train_partition(csr_graph, train_ids, 4)
+    e = time.time()
+    print(e - s, "ah")
 
 
 if __name__ == "__main__":
+    start = time.time()
     # test_sp_ss_by_layer_bfs_on_reddit()
     # test_sp_ss_by_layer_bfs_on_ogbn_products()
     # test_sp_ss_by_layer_bfs_on_ogbn_papers100M()
     test_combined_msbfs_train_partition()
+    end = time.time()
+    print(end - start)
