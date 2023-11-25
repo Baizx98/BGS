@@ -62,6 +62,9 @@ class Cache:
         hit_count = len(set(minibatch) & self.cached_ids_list[gpu_id])
         return hit_count, access_count
 
+    def hit_and_access_count_nvlink():
+        pass
+
 
 class CachePagraph(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
@@ -160,6 +163,16 @@ class CacheGnnlabPartition(Cache):
             self.cache_nodes_to_gpu(gpu_id, freq_list[gpu_id][:cache_size].tolist())
 
 
+class CacheMutilMetric(Cache):
+    # TODO
+    pass
+
+
+class CacheMutilMetricPartition(Cache):
+    # TODO
+    pass
+
+
 class DatasetCreator:
     def __init__(self) -> None:
         pass
@@ -185,7 +198,8 @@ class DatasetCreator:
             edge_index = th.load(
                 os.path.join(dataset_path, dataset_name, "edge_index.pt")
             )
-            CSRGraph(edge_index)
+            undirected_edge_index = pyg.utils.to_undirected(edge_index)
+            CSRGraph(undirected_edge_index)
 
             node_num = edge_index.max() + 1
             if (
@@ -206,6 +220,23 @@ class DatasetCreator:
             data.train_mask = train_mask
             train_ids = train_mask.nonzero(as_tuple=False).view(-1)
             return data, CSRGraph(edge_index), train_ids
+        elif dataset_name == "ogbn-papers100M":
+            dataset = PygNodePropPredDataset(dataset_name, root=dataset_path)
+            data = dataset[0]
+            edge_index = data.edge_index
+            split_idx = dataset.get_idx_split()
+            train_ids = split_idx["train"]
+            return data, CSRGraph(edge_index), train_ids
+        elif dataset_name == "yelp":
+            dataset = pyg_dataset.Yelp(root=root)
+            data = dataset[0]
+            train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
+            return data, CSRGraph(data.edge_index), train_ids
+        elif dataset_name == "webgraph":
+            # TODO: webgraph dataset
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
 
 
 def split_nodes(
@@ -231,7 +262,7 @@ def split_nodes(
     test_mask[nids[-test_len:]] = 1
     # save
     if dataset_path is not None:
-        th.save(train_mask, os.path.join(dataset_path, "train.pt"))
-        th.save(val_mask, os.path.join(dataset_path, "val.pt"))
-        th.save(test_mask, os.path.join(dataset_path, "test.pt"))
+        th.save(train_mask, os.path.join(dataset_path, dataset_name, "train.pt"))
+        th.save(val_mask, os.path.join(dataset_path, dataset_name, "val.pt"))
+        th.save(test_mask, os.path.join(dataset_path, dataset_name, "test.pt"))
     return train_mask, val_mask, test_mask
