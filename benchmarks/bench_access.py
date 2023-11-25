@@ -227,6 +227,11 @@ def degree_freq_rank(dataset_name: str, num_neighbors: list[int], batch_size: in
     logger.info(f"ave_loss: {ave_loss}")
 
 
+def bench_subgraph_size():
+    # TODO
+    pass
+
+
 if __name__ == "__main__":
     # logging setup
     logger = logging.getLogger("access-bench")

@@ -44,21 +44,34 @@ def bench_on_livejournal():
     """测试livejournal数据集的加载和使用"""
     edge_index = th.load("/home8t/bzx/data/livejournal/edge_index.pt")
     print(edge_index.shape)
+    num_nodes = edge_index.max() + 1
+    data = pyg.data.Data(edge_index=edge_index, num_nodes=num_nodes)
+    print("livejournal is undirected?", data.is_undirected())
 
 
 def bench_on_reddit():
-    dataset = pyg_dataset.Reddit(root="/home8t/bzx/data/")
+    dataset = pyg_dataset.Reddit(root="/home8t/bzx/data/Reddit")
     data = dataset[0]
     train_ids = data.train_mask.nonzero(as_tuple=False).view(-1)
     print(train_ids.shape)
+    print("node nums:", data.num_nodes)
+    print("edge nums:", data.num_edges)
+    print("is undirected:", data.is_undirected())
 
 
 def bench_on_pyg_undirected_data():
-    edge_index = th.tensor([[0, 1, 1, 2], [1, 0, 2, 1]])
-    data = pyg.data.Data(edge_index=edge_index, num_nodes=3)
+    edge_index = th.tensor([[0, 1, 1, 2], [1, 0, 2, 3]])
+    data = pyg.data.Data(edge_index=edge_index, num_nodes=4)
     print(data.is_undirected())
     print(data.num_edges)
 
 
+def bench_connected_graph_nums(dataset_name: str):
+    pass
+
+
 if __name__ == "__main__":
-    bench_on_ogbn_products()
+    # bench_on_ogbn_products()
+    # bench_on_livejournal()
+    # bench_on_pyg_undirected_data()
+    bench_on_reddit()
