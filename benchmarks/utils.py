@@ -81,7 +81,7 @@ class Cache:
         local_cached_ids = set(self.cached_ids_list[gpu_id])
         local_hit_count = len(set(minibatch) & local_cached_ids)
         all_cached_ids = set()
-        for i in self.world_size:
+        for i in range(self.world_size):
             all_cached_ids.update(self.cached_ids_list[i])
         remote_cached_ids = all_cached_ids - local_cached_ids
         remote_hit_count = len(set(minibatch) & remote_cached_ids)
