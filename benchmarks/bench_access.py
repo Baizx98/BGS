@@ -227,9 +227,30 @@ def degree_freq_rank(dataset_name: str, num_neighbors: list[int], batch_size: in
     logger.info(f"ave_loss: {ave_loss}")
 
 
-def bench_subgraph_size():
-    # TODO
-    pass
+def bench_subgraph_size(dataset_name: str, num_neighbors: list[int], batch_size: int):
+    """测试训练集划分与否采样子图的规模"""
+    logger.info(f"bench subgraph size on {dataset_name}")
+    logger.info(f"num_neighbors: {num_neighbors}")
+    logger.info(f"batch_size: {batch_size}")
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    loader = pyg.loader.NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        batch_size=batch_size,
+        input_nodes=train_ids,
+        shuffle=True,
+        num_workers=4,
+        persistent_workers=True,
+    )
+    totle = 0
+    count = 0
+    for minibatch in loader:
+        totle += minibatch.n_id.shape[0]
+        count += 1
+    ave_subgraph_size = totle / count
+    logger.info(f"ave_subgraph_size: {ave_subgraph_size}")
 
 
 if __name__ == "__main__":
