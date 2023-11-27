@@ -89,24 +89,37 @@ def bench_linear_mbfs_on_graph(
     else:
         raise NotImplementedError
     # 遍历minibatch，统计命中率
-    hit_count_list = [0 for i in range(world_size)]
+    # hit_count_list = [0 for i in range(world_size)]
+    local_hit_count_list = [0 for i in range(world_size)]
+    remote_hit_count_list = [0 for i in range(world_size)]
     access_count_list = [0 for i in range(world_size)]
     for gpu_id in range(world_size):
         logging.info(f"Processing GPU {gpu_id}")
         for minibatch in loader_list[gpu_id]:
-            hit_count, access_count = cache.hit_and_access_count(
-                gpu_id, minibatch.n_id.tolist()
-            )
-            hit_count_list[gpu_id] += hit_count
+            # hit_count, access_count = cache.hit_and_access_count(
+            #     gpu_id, minibatch.n_id.tolist()
+            # )
+            (
+                local_hit_count,
+                remote_hit_count,
+                access_count,
+            ) = cache.hit_and_access_count_nvlink(gpu_id, minibatch.n_id.tolist())
+            # hit_count_list[gpu_id] += hit_count
+            local_hit_count_list[gpu_id] += local_hit_count
+            remote_hit_count_list[gpu_id] += remote_hit_count
             access_count_list[gpu_id] += access_count
             # logging.info(
             #     f"GPU {gpu_id}: Hit count: {hit_count}, Access count: {access_count}"
             # )
     # 计算命中率
-    hit_ratio_list = [
-        hit_count_list[i] / access_count_list[i] for i in range(world_size)
+    local_hit_ratio_list = [
+        local_hit_count_list[i] / access_count_list[i] for i in range(world_size)
     ]
-    logger.info("Hit ratio list:" + str(hit_ratio_list))
+    remote_hit_count_list = [
+        remote_hit_count_list[i] / access_count_list[i] for i in range(world_size)
+    ]
+    logger.info("Local hit ratio list:" + str(local_hit_ratio_list))
+    logger.info("Remote hit ratio list:" + str(remote_hit_count_list))
 
 
 if __name__ == "__main__":
@@ -124,7 +137,7 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "ogbn-products"
+    dataset_name = "yelp"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]

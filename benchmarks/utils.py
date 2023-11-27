@@ -62,8 +62,30 @@ class Cache:
         hit_count = len(set(minibatch) & self.cached_ids_list[gpu_id])
         return hit_count, access_count
 
-    def hit_and_access_count_nvlink():
-        pass
+    def hit_and_access_count_nvlink(
+        self, gpu_id: int, minibatch: list
+    ) -> (int, int, int):
+        """
+        Calculates the local hit count, remote hit count, and access count for a given GPU and minibatch.
+
+        Args:
+            gpu_id (int): The ID of the GPU.
+            minibatch (list): The minibatch of data.
+
+        Returns:
+            tuple: A tuple containing the local hit count, remote hit count, and access count.
+        """
+        if isinstance(minibatch, th.Tensor):
+            minibatch = minibatch.tolist()
+        access_count = len(minibatch)
+        local_cached_ids = set(self.cached_ids_list[gpu_id])
+        local_hit_count = len(set(minibatch) & local_cached_ids)
+        all_cached_ids = set()
+        for i in self.world_size:
+            all_cached_ids.update(self.cached_ids_list[i])
+        remote_cached_ids = all_cached_ids - local_cached_ids
+        remote_hit_count = len(set(minibatch) & remote_cached_ids)
+        return local_hit_count, remote_hit_count, access_count
 
 
 class CachePagraph(Cache):
