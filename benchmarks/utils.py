@@ -87,6 +87,14 @@ class Cache:
         remote_hit_count = len(set(minibatch) & remote_cached_ids)
         return local_hit_count, remote_hit_count, access_count
 
+    # 计算GPU上缓存节点的冗余度
+    def get_reduncy(self, node_count) -> float:
+        all_cached_ids = set()
+        for i in range(self.world_size):
+            all_cached_ids.update(self.cached_ids_list[i])
+        all_capacity = self.cache_ratio * node_count * self.world_size
+        return all_capacity / len(all_cached_ids)
+
 
 class CachePagraph(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
