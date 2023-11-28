@@ -88,6 +88,8 @@ def bench_linear_mbfs_on_graph(
         cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
     else:
         raise NotImplementedError
+    # 计算缓存冗余度 冗余度=总缓存空间/实际缓存节点数(去重后)
+    logger.info("Cache redundancy: " + str(cache.get_reduncy(csr_graph.node_count)))
     # 遍历minibatch，统计命中率
     # hit_count_list = [0 for i in range(world_size)]
     local_hit_count_list = [0 for i in range(world_size)]

@@ -133,8 +133,8 @@ if __name__ == "__main__":
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
-    cache_ratio = 0.1
-    cache_policy = "GnnLab"
+    cache_ratio = 0.4
+    cache_policy = "GnnLab "
     partition_policy = "naive"
     gnn_framework = "pyg"
 

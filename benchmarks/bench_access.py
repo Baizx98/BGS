@@ -1,11 +1,14 @@
 """测试节点访问特性"""
 import logging
 from tqdm import tqdm
+from collections import Counter
+
 import torch as th
 import torch_geometric as pyg
+import matplotlib.pyplot as plt
+
 import utils
 import bgs
-import matplotlib.pyplot as plt
 
 root = "/home8t/bzx/data/"
 
@@ -41,6 +44,17 @@ def bench_access_hitmap(dataset_name: str, num_neighbors: list[int], batch_size:
 
 # 训练节点的K阶邻居全采样占全图节点的比例
 def bench_khop_ratio(dataset_name: str, num_neighbors: list[int], batch_size: int):
+    """
+    Calculate the k-hop ratio for a given dataset.
+
+    Args:
+        dataset_name (str): The name of the dataset.
+        num_neighbors (list[int]): A list of the number of neighbors to consider for each hop.
+        batch_size (int): The batch size for loading the data.
+
+    Returns:
+        None
+    """
     data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
         dataset_name, root
     )
@@ -67,6 +81,17 @@ def bench_khop_ratio(dataset_name: str, num_neighbors: list[int], batch_size: in
 def bench_two_batch_overlap(
     dataset_name: str, num_neighbors: list[int], batch_size: int
 ):
+    """
+    Benchmarks the overlap between two batches in a dataset.
+
+    Args:
+        dataset_name (str): The name of the dataset.
+        num_neighbors (list[int]): The number of neighbors for each node.
+        batch_size (int): The size of each batch.
+
+    Returns:
+        None
+    """
     logger.info("bench two batch overlap on " + dataset_name)
     logger.info("num_neighbors: " + str(num_neighbors))
     logger.info("batch_size: " + str(batch_size))
@@ -228,7 +253,17 @@ def degree_freq_rank(dataset_name: str, num_neighbors: list[int], batch_size: in
 
 
 def bench_subgraph_size(dataset_name: str, num_neighbors: list[int], batch_size: int):
-    """测试训练集划分与否采样子图的规模"""
+    """
+    测试训练集划分与否采样子图的规模
+
+    Args:
+        dataset_name (str): 数据集名称
+        num_neighbors (list[int]): 邻居节点的数量列表
+        batch_size (int): 批处理大小
+
+    Returns:
+        None
+    """
     logger.info(f"bench subgraph size on {dataset_name}")
     logger.info(f"num_neighbors: {num_neighbors}")
     logger.info(f"batch_size: {batch_size}")
@@ -251,6 +286,52 @@ def bench_subgraph_size(dataset_name: str, num_neighbors: list[int], batch_size:
         count += 1
     ave_subgraph_size = totle / count
     logger.info(f"ave_subgraph_size: {ave_subgraph_size}")
+
+
+def bench_degree_power_law(dataset_name: str):
+    data, csr_graph, train_ids = utils.DatasetCreator.pyg_dataset_creator(
+        dataset_name, root
+    )
+    degree = csr_graph.out_degrees
+    degree = degree.tolist()
+    degree_count = Counter(degree)
+    degrees = list(degree_count.keys())
+    frequencies = list(degree_count.values())
+
+    # 创建包含两个子图的图表
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=True)
+
+    # 绘制直方图
+    ax1.bar(degrees, frequencies)
+    ax1.set_ylabel("Frequency")
+    ax1.set_title("Degree Distribution")
+
+    # 绘制双对数坐标的分布图
+    ax2.scatter(degrees, frequencies, s=10)
+    ax2.set_xlabel("Degree")
+    ax2.set_ylabel("Frequency")
+    ax2.set_title("Log-Log Degree Distribution")
+
+    # 设置双对数坐标轴
+    ax2.set_xscale("log")
+    ax2.set_yscale("log")
+
+    # 直接绘制直方图
+    ax3.hist(degree, bins=30000)
+    ax3.set_xlabel("Degree")
+    ax3.set_ylabel("Frequency")
+    ax3.set_title("Degree Distribution")
+
+    # 绘制双对数坐标
+    ax4.hist(degree, bins=30000)
+    ax4.set_xlabel("Degree")
+    ax4.set_ylabel("Frequency")
+    ax4.set_title("Log-Log Degree Distribution")
+    ax4.set_xscale("log")
+    ax4.set_yscale("log")
+
+    plt.tight_layout()
+    plt.savefig(f"img/degree_power_law_{dataset_name}.png")
 
 
 if __name__ == "__main__":
@@ -278,5 +359,7 @@ if __name__ == "__main__":
     # bench_train_node_degree_distribution("ogbn-products")
     # bench_access_frequency("Reddit", [25, 10], 1024)
     # bench_train_neighbor_degree_distribution("livejournal", [-1], 1024)
-    degree_freq_rank("livejournal", [25, 10], 1024)
+    # degree_freq_rank("livejournal", [25, 10], 1024)
+    bench_degree_power_law("livejournal")
+
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
