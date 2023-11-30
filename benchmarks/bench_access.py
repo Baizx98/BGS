@@ -360,6 +360,6 @@ if __name__ == "__main__":
     # bench_access_frequency("Reddit", [25, 10], 1024)
     # bench_train_neighbor_degree_distribution("livejournal", [-1], 1024)
     # degree_freq_rank("livejournal", [25, 10], 1024)
-    bench_degree_power_law("livejournal")
+    bench_degree_power_law("ogbn-products")
 
     logger.info("-" * 20 + "benchmark end" + "-" * 20)

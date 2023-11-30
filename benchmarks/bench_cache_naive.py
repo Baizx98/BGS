@@ -14,6 +14,7 @@ from utils import Cache
 from utils import CachePagraph
 from utils import CacheGnnlab
 from utils import CacheGnnlabPartition
+from utils import CacheMutilMetric
 from utils import DatasetCreator
 
 dataset_root = "/home8t/bzx/data/"
@@ -77,8 +78,13 @@ def bench_naive_on_graph(
         pre_sampler_epochs = 3
         cache = CacheGnnlabPartition(world_size, cache_ratio)
         cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
+    elif cache_policy == "MutilMetric":
+        logger.info("MutilMetric cache policy")
+        cache = CacheMutilMetric(world_size, cache_ratio)
+        cache.generate_cache(csr_graph, train_ids)
     else:
         raise NotImplementedError
+    logger.info("Cached done")
 
     # 计算命中率
     # hit_count_list = [0 for i in range(world_size)]
@@ -129,12 +135,12 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "yelp"
+    dataset_name = "Reddit"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
-    cache_ratio = 0.4
-    cache_policy = "GnnLab "
+    cache_ratio = 0.1
+    cache_policy = "MutilMetric"
     partition_policy = "naive"
     gnn_framework = "pyg"
 
