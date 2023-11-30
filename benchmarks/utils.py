@@ -195,7 +195,57 @@ class CacheGnnlabPartition(Cache):
 
 class CacheMutilMetric(Cache):
     # TODO
-    pass
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
+
+    def generate_cache(
+        self,
+        csr_graph: CSRGraph,
+        train_ids,
+    ):
+        first_access_probability = th.zeros(csr_graph.node_count, dtype=float)
+        train_mask = th.zeros(csr_graph.node_count, dtype=bool)
+        train_mask[train_ids] = True
+        one_hop_neighbor_mask = th.zeros(csr_graph.node_count, dtype=bool)
+
+        cache_size = self.cache_ratio * csr_graph.node_count
+
+        # 一阶邻居概率计算
+        # 从训练节点出发，计算一阶邻居的访问概率
+        for n_id in train_ids:
+            degree = csr_graph.out_degree(n_id)
+            probability = 1 / degree
+            neighbors = csr_graph.indices[
+                csr_graph.indptr[n_id] : csr_graph.indptr[n_id + 1]
+            ]
+            one_hop_neighbor_mask[neighbors] = True
+            for neighbor in neighbors:
+                first_access_probability[neighbor] += probability
+        first_access_probability = th.nn.functional.normalize(
+            first_access_probability, p=2, dim=0
+        )
+        # 二阶邻居概率计算
+        # 从一阶邻居出发，计算二阶邻居的访问概率，注意在二阶邻居中可能要排除训练节点
+        second_access_probability = th.zeros(csr_graph.node_count, dtype=float)
+        one_hop_neighbor = one_hop_neighbor_mask.nonzero(as_tuple=False).view(-1)
+        for n_id in one_hop_neighbor:
+            degree = csr_graph.out_degree(n_id)
+            probability = 1 / degree
+            neighbors = csr_graph.indices[
+                csr_graph.indptr[n_id] : csr_graph.indptr[n_id + 1]
+            ]
+            for neighbor in neighbors:
+                # if train_mask[neighbor] == False:
+                second_access_probability[neighbor] += probability
+        # p为多少呢？范数的设计要考量
+        second_access_probability = th.nn.functional.normalize(
+            second_access_probability, p=2, dim=0
+        )
+        access_probability = first_access_probability + second_access_probability
+        access_probability = th.nn.functional.normalize(access_probability, p=2, dim=0)
+        sorted_nid = th.argsort(access_probability, descending=True)
+        for gpu_nid in range(self.world_size):
+            self.cache_nodes_to_gpu(gpu_nid, sorted_nid[:cache_size].tolist())
 
 
 class CacheMutilMetricPartition(Cache):
