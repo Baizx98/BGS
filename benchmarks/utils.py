@@ -1,5 +1,7 @@
 import os
 import logging
+from tqdm import tqdm
+
 import torch as th
 import torch_geometric as pyg
 import torch_geometric.datasets as pyg_dataset
@@ -203,24 +205,25 @@ class CacheMutilMetric(Cache):
         csr_graph: CSRGraph,
         train_ids,
     ):
-        first_access_probability = th.zeros(csr_graph.node_count, dtype=float)
+        first_access_probability: th.Tensor = th.zeros(
+            csr_graph.node_count, dtype=float
+        )
         train_mask = th.zeros(csr_graph.node_count, dtype=bool)
         train_mask[train_ids] = True
         one_hop_neighbor_mask = th.zeros(csr_graph.node_count, dtype=bool)
 
-        cache_size = self.cache_ratio * csr_graph.node_count
+        cache_size = int(self.cache_ratio * csr_graph.node_count)
 
         # 一阶邻居概率计算
         # 从训练节点出发，计算一阶邻居的访问概率
+        pbar = tqdm(total=train_ids.shape[0])
         for n_id in train_ids:
             degree = csr_graph.out_degree(n_id)
             probability = 1 / degree
-            neighbors = csr_graph.indices[
-                csr_graph.indptr[n_id] : csr_graph.indptr[n_id + 1]
-            ]
+            neighbors = csr_graph.out_neighbors(n_id)
             one_hop_neighbor_mask[neighbors] = True
-            for neighbor in neighbors:
-                first_access_probability[neighbor] += probability
+            first_access_probability[neighbors] += probability
+            pbar.update(1)
         first_access_probability = th.nn.functional.normalize(
             first_access_probability, p=2, dim=0
         )
@@ -228,15 +231,14 @@ class CacheMutilMetric(Cache):
         # 从一阶邻居出发，计算二阶邻居的访问概率，注意在二阶邻居中可能要排除训练节点
         second_access_probability = th.zeros(csr_graph.node_count, dtype=float)
         one_hop_neighbor = one_hop_neighbor_mask.nonzero(as_tuple=False).view(-1)
+        pbar = tqdm(total=one_hop_neighbor.shape[0])
         for n_id in one_hop_neighbor:
             degree = csr_graph.out_degree(n_id)
             probability = 1 / degree
-            neighbors = csr_graph.indices[
-                csr_graph.indptr[n_id] : csr_graph.indptr[n_id + 1]
-            ]
-            for neighbor in neighbors:
-                # if train_mask[neighbor] == False:
-                second_access_probability[neighbor] += probability
+            neighbors = csr_graph.out_neighbors(n_id)
+            # if train_mask[neighbor] == False:
+            second_access_probability[neighbors] += probability
+            pbar.update(1)
         # p为多少呢？范数的设计要考量
         second_access_probability = th.nn.functional.normalize(
             second_access_probability, p=2, dim=0
