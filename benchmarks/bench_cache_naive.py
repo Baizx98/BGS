@@ -135,12 +135,12 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "Reddit"
+    dataset_name = "ogbn-products"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
     cache_ratio = 0.1
-    cache_policy = "MutilMetric"
+    cache_policy = "PaGraph"
     partition_policy = "naive"
     gnn_framework = "pyg"
 
