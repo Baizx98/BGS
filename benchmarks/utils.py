@@ -205,6 +205,7 @@ class CacheMutilMetric(Cache):
         csr_graph: CSRGraph,
         train_ids,
     ):
+        # TODO 转移到CUDA计算
         first_access_probability: th.Tensor = th.zeros(
             csr_graph.node_count, dtype=float
         )
@@ -219,6 +220,8 @@ class CacheMutilMetric(Cache):
         pbar = tqdm(total=train_ids.shape[0])
         for n_id in train_ids:
             degree = csr_graph.out_degree(n_id)
+            if degree == 0:
+                continue
             probability = 1 / degree
             neighbors = csr_graph.out_neighbors(n_id)
             one_hop_neighbor_mask[neighbors] = True
@@ -234,6 +237,8 @@ class CacheMutilMetric(Cache):
         pbar = tqdm(total=one_hop_neighbor.shape[0])
         for n_id in one_hop_neighbor:
             degree = csr_graph.out_degree(n_id)
+            if degree == 0:
+                continue
             probability = 1 / degree
             neighbors = csr_graph.out_neighbors(n_id)
             # if train_mask[neighbor] == False:
