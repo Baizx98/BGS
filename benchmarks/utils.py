@@ -204,14 +204,23 @@ class CacheMutilMetric(Cache):
         self,
         csr_graph: CSRGraph,
         train_ids,
+        device: th.device = th.device("cpu"),
     ):
         # TODO 转移到CUDA计算
+        # TODO 整数转换为tensor
+        csr_graph.to(device)
+        train_ids.to(device)
+
         first_access_probability: th.Tensor = th.zeros(
-            csr_graph.node_count, dtype=float
+            csr_graph.node_count,
+            dtype=float,
+            device=device,
         )
-        train_mask = th.zeros(csr_graph.node_count, dtype=bool)
+        train_mask = th.zeros(csr_graph.node_count, dtype=bool, device=device)
         train_mask[train_ids] = True
-        one_hop_neighbor_mask = th.zeros(csr_graph.node_count, dtype=bool)
+        one_hop_neighbor_mask = th.zeros(
+            csr_graph.node_count, dtype=bool, device=device
+        )
 
         cache_size = int(self.cache_ratio * csr_graph.node_count)
 
@@ -232,7 +241,9 @@ class CacheMutilMetric(Cache):
         )
         # 二阶邻居概率计算
         # 从一阶邻居出发，计算二阶邻居的访问概率，注意在二阶邻居中可能要排除训练节点
-        second_access_probability = th.zeros(csr_graph.node_count, dtype=float)
+        second_access_probability = th.zeros(
+            csr_graph.node_count, dtype=float, device=device
+        )
         one_hop_neighbor = one_hop_neighbor_mask.nonzero(as_tuple=False).view(-1)
         pbar = tqdm(total=one_hop_neighbor.shape[0])
         for n_id in one_hop_neighbor:
