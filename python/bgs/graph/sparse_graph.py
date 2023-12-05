@@ -54,6 +54,10 @@ class CSRGraph:
         self._indptr.share_memory_()
         self._indices.share_memory_()
 
+    def to(self, device: th.device):
+        self._indptr = self._indptr.to(device)
+        self._indices = self._indices.to(device)
+
 
 class COOGraph:
     def __init__(self, edge_index=None) -> None:
