@@ -98,6 +98,17 @@ class Cache:
         return all_capacity / len(all_cached_ids)
 
 
+class CacheWithDataPlacement(Cache):
+    def __init__(self, world_size: int, cache_ratio: int = 0.1) -> None:
+        super().__init__(world_size, cache_ratio)
+
+    def generate_layout(
+        self, access_probability_list: list[th.Tensor]
+    ) -> list[th.Tensor]:
+        pass
+        return
+
+
 class CachePagraph(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
         super().__init__(world_size, cache_ratio)
@@ -151,7 +162,7 @@ class CacheGnnlab(Cache):
         return sorted_nid
 
 
-class CacheGnnlabPartition(Cache):
+class CacheGnnlabPartition(CacheWithDataPlacement):
     """
     A class for caching graph nodes on multiple GPUs using GNNLab partitioning strategy.
 
@@ -266,9 +277,12 @@ class CacheMutilMetric(Cache):
             self.cache_nodes_to_gpu(gpu_nid, sorted_nid[:cache_size].tolist())
 
 
-class CacheMutilMetricPartition(Cache):
+class CacheMutilMetricPartition(CacheWithDataPlacement):
     # TODO
     pass
+
+    def generate_cache():
+        pass
 
 
 class DatasetCreator:

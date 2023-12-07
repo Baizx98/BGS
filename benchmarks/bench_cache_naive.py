@@ -81,7 +81,7 @@ def bench_naive_on_graph(
     elif cache_policy == "MutilMetric":
         logger.info("MutilMetric cache policy")
         cache = CacheMutilMetric(world_size, cache_ratio)
-        cache.generate_cache(csr_graph, train_ids)
+        cache.generate_cache(csr_graph, train_ids, th.device("cuda:1"))
     else:
         raise NotImplementedError
     logger.info("Cached done")
@@ -135,12 +135,12 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "ogbn-products"
+    dataset_name = "yelp"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
     cache_ratio = 0.1
-    cache_policy = "PaGraph"
+    cache_policy = "MutilMetric"
     partition_policy = "naive"
     gnn_framework = "pyg"
 
