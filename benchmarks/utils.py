@@ -247,9 +247,9 @@ class CacheMutilMetric(Cache):
             one_hop_neighbor_mask[neighbors] = True
             first_access_probability[neighbors] += probability
             pbar.update(1)
-        first_access_probability = th.nn.functional.normalize(
-            first_access_probability, p=2, dim=0
-        )
+        # first_access_probability = th.nn.functional.normalize(
+        #     first_access_probability, p=2, dim=0
+        # )
         # 二阶邻居概率计算
         # 从一阶邻居出发，计算二阶邻居的访问概率，注意在二阶邻居中可能要排除训练节点
         second_access_probability = th.zeros(
@@ -267,9 +267,9 @@ class CacheMutilMetric(Cache):
             second_access_probability[neighbors] += probability
             pbar.update(1)
         # p为多少呢？范数的设计要考量
-        second_access_probability = th.nn.functional.normalize(
-            second_access_probability, p=2, dim=0
-        )
+        # second_access_probability = th.nn.functional.normalize(
+        #     second_access_probability, p=2, dim=0
+        # )
         access_probability = first_access_probability + second_access_probability
         access_probability = th.nn.functional.normalize(access_probability, p=2, dim=0)
         sorted_nid = th.argsort(access_probability, descending=True)
