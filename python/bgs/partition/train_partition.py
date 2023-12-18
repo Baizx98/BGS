@@ -348,3 +348,8 @@ def combined_msbfs_train_partition(
         partition_neighbors_set_dict[max_score_index].update(train_neighbors_set)
     print("nodes_count_of_partition:", nodes_count_of_partition)
     return partition_dict
+
+
+def combined_msbfs_train_partition_v2():
+    # 当最短距离的节点不唯一时，使用最多公共全采样邻居来决定。
+    pass

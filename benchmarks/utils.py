@@ -227,6 +227,9 @@ class CacheMutilMetric(Cache):
             dtype=float,
             device=device,
         )
+        # TODO 对训练节点初始化权重
+        pass
+
         train_mask = th.zeros(csr_graph.node_count, dtype=bool, device=device)
         train_mask[train_ids] = True
         one_hop_neighbor_mask = th.zeros(

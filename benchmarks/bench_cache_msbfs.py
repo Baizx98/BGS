@@ -62,6 +62,9 @@ def bench_linear_mbfs_on_graph(
             part_dict = train_partition.combined_msbfs_train_partition(
                 csr_graph, train_ids, world_size
             )
+        elif partition_policy == "combined_msbfs_v2":
+            # TODO 未实现
+            part_dict = train_partition.combined_msbfs_train_partition_v2()
         else:
             raise NotImplementedError
         with open(path, "wb") as file:
@@ -86,6 +89,14 @@ def bench_linear_mbfs_on_graph(
         pre_sampler_epochs = 3
         cache = CacheGnnlabPartition(world_size, cache_ratio)
         cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
+    elif cache_policy == "Pagraph-partition":
+        # TODO 未实现
+        logger.info("Pagraph-partition cache policy")
+        pass
+    elif cache_policy == "MutilMetric-partition":
+        # TODO 未实现
+        logger.info("MutilMetric-partition cache policy")
+        pass
     else:
         raise NotImplementedError
     # 计算缓存冗余度 冗余度=总缓存空间/实际缓存节点数(去重后)
