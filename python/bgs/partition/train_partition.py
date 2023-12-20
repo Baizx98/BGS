@@ -263,7 +263,7 @@ def sp_of_ss_by_layer_bfs(
 
 def combined_msbfs_train_partition(
     csr_graph: CSRGraph, train_node_ids: th.Tensor, partition_num: int
-) -> dict[int, list]:
+) -> dict[int, list[int]]:
     """结合pagraph的多源BFS训练集划分算法，将拓扑上距离更近的训练节点放在一个分区专供特定的GPU训练从而提高数据局部性"""
     # 首先使用bfs快速得到每个分区的初始初始分区，然后使用pagraph的算法进行后续的划分
     pass
