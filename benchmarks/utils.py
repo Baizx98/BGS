@@ -1,8 +1,10 @@
 import os
 import logging
+from abc import ABC, abstractmethod
 from tqdm import tqdm
 
 import torch as th
+import torch.nn.functional as F
 import torch_geometric as pyg
 import torch_geometric.datasets as pyg_dataset
 from torch_geometric.loader import NeighborLoader
@@ -20,7 +22,7 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 
-class Cache:
+class Cache(ABC):
     """
     A class for caching nodes to GPU and counting hit and access count.
 
@@ -97,14 +99,25 @@ class Cache:
         all_capacity = self.cache_ratio * node_count * self.world_size
         return all_capacity / len(all_cached_ids)
 
+    @abstractmethod
+    def generate_probability(self, **kwargs):
+        """生成节点在GPU或多个GPU上被访问的概率,结果要归一化"""
+        raise NotImplementedError
 
-class CacheWithDataPlacement(Cache):
-    def __init__(self, world_size: int, cache_ratio: int = 0.1) -> None:
-        super().__init__(world_size, cache_ratio)
+    @abstractmethod
+    def generate_cache(self, **kwargs):
+        """生成每个GPU上要缓存的部分"""
+        raise NotImplementedError
 
+
+class DataPlacement(ABC):
+    """抽象类，提供数据放置方法的接口"""
+
+    @abstractmethod
     def generate_layout(
         self, access_probability_list: list[th.Tensor]
     ) -> list[th.Tensor]:
+        """生成每个GPU上要缓存的部分"""
         pass
         return
 
@@ -113,7 +126,13 @@ class CachePagraph(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
         super().__init__(world_size, cache_ratio)
 
-    def generate_cache(self, csr_graph: CSRGraph):
+    def generate_probability(self, **kwargs) -> th.Tensor:
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        out_degrees: th.Tensor = csr_graph.out_degrees
+        probability = F.normalize(out_degrees, p=1, dim=0)
+        return probability
+
+    def generate_cache(self, **kwargs):
         """
         Generate a cache of nodes with high out degrees for each GPU.
 
@@ -123,9 +142,11 @@ class CachePagraph(Cache):
         Returns:
             None
         """
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+
         cache_size = int(csr_graph.node_count * self.cache_ratio)
-        out_degrees: th.Tensor = csr_graph.out_degrees
-        sorted_nid = th.argsort(out_degrees, descending=True)
+        probability = self.generate_probability(csr_graph=csr_graph)
+        sorted_nid = th.argsort(probability, descending=True)
         for gpu_id in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
         return sorted_nid
@@ -135,12 +156,24 @@ class CacheGnnlab(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
         super().__init__(world_size, cache_ratio)
 
-    def generate_cache(
-        self,
-        csr_graph: CSRGraph,
-        loader_list: list[NeighborLoader],
-        pre_sampler_epoches: int = 3,
-    ):
+    def generate_probability(self, **kwargs) -> th.Tensor:
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        loader_list: list[NeighborLoader] = kwargs.get("loader_list")
+        gpu_list: list[int] = kwargs.get("gpu_list")
+        pre_sampler_epoches: int = kwargs.get("pre_sampler_epoches", 3)
+        # 为了支持全局cache和分区cache
+        assert len(loader_list) == len(gpu_list)
+
+        freq: th.Tensor = th.zeros(csr_graph.node_count, dtype=int)
+        for i in range(self.world_size):
+            for j in range(pre_sampler_epoches):
+                ### 解决LOADER传递的问题，直接传递
+                for minibatch in loader_list[i]:
+                    freq[minibatch.n_id] += 1
+        probability = F.normalize(freq, p=1, dim=0)
+        return probability
+
+    def generate_cache(self, **kwargs):
         """
         Generate a cache of nodes for each GPU based on their frequency of access in the given `loader_list`.
 
@@ -149,20 +182,24 @@ class CacheGnnlab(Cache):
             loader_list (list[NeighborLoader]): A list of NeighborLoader objects for each GPU.
             pre_sampler_epoches (int, optional): The number of epochs to run the pre-sampler for. Defaults to 3.
         """
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        loader_list: list[NeighborLoader] = kwargs.get("loader_list")
+        pre_sampler_epoches: int = kwargs.get("pre_sampler_epoches", 3)
+
         cache_size = int(csr_graph.node_count * self.cache_ratio)
-        freq: th.Tensor = th.zeros(csr_graph.node_count, dtype=int)
-        for i in range(self.world_size):
-            for j in range(pre_sampler_epoches):
-                ### 解决LOADER传递的问题，直接传递
-                for minibatch in loader_list[i]:
-                    freq[minibatch.n_id] += 1
-        sorted_nid = th.argsort(freq, descending=True)
+        probability = self.generate_probability(
+            csr_graph=csr_graph,
+            loader_list=loader_list,
+            gpu_list=[i for i in range(self.world_size)],
+            pre_sampler_epoches=pre_sampler_epoches,
+        )
+        sorted_nid = th.argsort(probability, descending=True)
         for gpu_id in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
         return sorted_nid
 
 
-class CacheGnnlabPartition(CacheWithDataPlacement):
+class CacheGnnlabPartition(CacheGnnlab, DataPlacement):
     """
     A class for caching graph nodes on multiple GPUs using GNNLab partitioning strategy.
 
@@ -176,12 +213,9 @@ class CacheGnnlabPartition(CacheWithDataPlacement):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
         super().__init__(world_size, cache_ratio)
 
-    def generate_cache(
-        self,
-        csr_graph: CSRGraph,
-        loader_list: list[NeighborLoader],
-        pre_sampler_epoches: int = 3,
-    ):
+    # generate_probability方法使用父类CacheGnnlab的方法
+
+    def generate_cache(self, **kwargs):
         """
         Generate cache for each GPU.
 
@@ -190,20 +224,29 @@ class CacheGnnlabPartition(CacheWithDataPlacement):
             loader_list (list[NeighborLoader]): The list of NeighborLoader objects for each GPU.
             pre_sampler_epoches (int, optional): The number of epochs to run the pre-sampler. Defaults to 3.
         """
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        loader_list: list[NeighborLoader] = kwargs.get("loader_list")
+        pre_sampler_epoches: int = kwargs.get("pre_sampler_epoches", 3)
+
         cache_size = int(csr_graph.node_count * self.cache_ratio)
-        freq_list: list[th.Tensor] = [
-            th.zeros(csr_graph.node_count, dtype=int) for i in range(self.world_size)
+        probability_list = [
+            self.generate_probability(
+                csr_graph=csr_graph,
+                loader_list=loader_list[i],
+                gpu_list=[i],
+                pre_sampler_epoches=pre_sampler_epoches,
+            )
+            for i in range(self.world_size)
         ]
-        for i in range(self.world_size):
-            for j in range(pre_sampler_epoches):
-                for minibatch in loader_list[i]:
-                    freq_list[i][minibatch.n_id] += 1
         # 对freq_list中的每个tensor进行降序排序，返回排序后的元素的索引
+        sorted_nid_list = []
         for i in range(self.world_size):
-            freq_list[i] = th.argsort(freq_list[i], descending=True)
+            sorted_nid_list[i] = th.argsort(probability_list[i], descending=True)
         # 设置每个GPU缓存节点的数量
         for gpu_id in range(self.world_size):
-            self.cache_nodes_to_gpu(gpu_id, freq_list[gpu_id][:cache_size].tolist())
+            self.cache_nodes_to_gpu(
+                gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
+            )
 
 
 class CacheMutilMetric(Cache):
@@ -211,14 +254,14 @@ class CacheMutilMetric(Cache):
     def __init__(self, world_size: int, cache_ratio: float) -> None:
         super().__init__(world_size, cache_ratio)
 
-    def generate_cache(
-        self,
-        csr_graph: CSRGraph,
-        train_ids,
-        device: th.device = th.device("cpu"),
-    ):
+    def generate_probability(self, **kwargs) -> th.Tensor:
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        train_ids: th.Tensor = kwargs.get("train_ids")
+        device: th.device = kwargs.get("device")
+
         # TODO 转移到CUDA计算
         # TODO 整数转换为tensor
+
         csr_graph.to(device)
         train_ids.to(device)
 
@@ -227,7 +270,7 @@ class CacheMutilMetric(Cache):
             dtype=float,
             device=device,
         )
-        # TODO 对训练节点初始化权重
+        # TODO 对训练节点初始化权重，这很重要
         pass
 
         train_mask = th.zeros(csr_graph.node_count, dtype=bool, device=device)
@@ -235,8 +278,6 @@ class CacheMutilMetric(Cache):
         one_hop_neighbor_mask = th.zeros(
             csr_graph.node_count, dtype=bool, device=device
         )
-
-        cache_size = int(self.cache_ratio * csr_graph.node_count)
 
         # 一阶邻居概率计算
         # 从训练节点出发，计算一阶邻居的访问概率
@@ -273,19 +314,54 @@ class CacheMutilMetric(Cache):
         # second_access_probability = th.nn.functional.normalize(
         #     second_access_probability, p=2, dim=0
         # )
-        access_probability = first_access_probability + second_access_probability
-        access_probability = th.nn.functional.normalize(access_probability, p=2, dim=0)
-        sorted_nid = th.argsort(access_probability, descending=True)
+        probability = first_access_probability + second_access_probability
+        probability = th.nn.functional.normalize(probability, p=2, dim=0)
+        return probability
+
+    def generate_cache(self, **kwargs):
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        train_ids = kwargs.get("train_ids")
+        device: th.device = kwargs.get("device", th.device("cpu"))
+
+        cache_size = int(self.cache_ratio * csr_graph.node_count)
+        probability = self.generate_probability(csr_graph, train_ids, device)
+        sorted_nid = th.argsort(probability, descending=True)
         for gpu_nid in range(self.world_size):
             self.cache_nodes_to_gpu(gpu_nid, sorted_nid[:cache_size].tolist())
 
 
-class CacheMutilMetricPartition(CacheWithDataPlacement):
+class CacheMutilMetricPartition(CacheMutilMetric, DataPlacement):
     # TODO
     pass
 
-    def generate_cache():
-        pass
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
+
+    # generate_probability方法使用父类CacheMutilMetric的方法
+
+    def generate_cache(self, **kwargs):
+        csr_graph: CSRGraph = kwargs.get("csr_graph")
+        part_dict: dict[int, list[int]] = kwargs.get("part_dict")
+        device: th.device = kwargs.get("device", th.device("cpu"))
+        # TODO part_dict转为tensor的list
+        # TODO gpu list需要处理，最终用多个GPU来完成
+
+        cache_size = int(self.cache_ratio * csr_graph.node_count)
+        # TODO 需要DDP处理
+        probability_list = [
+            self.generate_probability(
+                csr_graph=csr_graph, train_ids=part_dict[i], device=device
+            )
+            for i in range(self.world_size)
+        ]
+        sorted_nid_list = []
+        for i in range(self.world_size):
+            sorted_nid_list[i] = th.argsort(probability_list[i], descending=True)
+        # 设置每个GPU缓存节点的数量
+        for gpu_id in range(self.world_size):
+            self.cache_nodes_to_gpu(
+                gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
+            )
 
 
 class DatasetCreator:
