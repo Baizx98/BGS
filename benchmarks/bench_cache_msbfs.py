@@ -11,8 +11,8 @@ from torch_geometric.loader import NeighborLoader
 from bgs.partition import train_partition
 from bgs.graph import CSRGraph
 
-from utils import Cache
 from utils import CacheGnnlabPartition
+from utils import CacheMutilMetricPartition
 from utils import DatasetCreator
 
 dataset_root = "/home8t/bzx/data/"
@@ -88,14 +88,24 @@ def bench_linear_mbfs_on_graph(
         logger.info("GnnLab-partition cache policy")
         pre_sampler_epochs = 3
         cache = CacheGnnlabPartition(world_size, cache_ratio)
-        cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
+        cache.generate_cache(
+            csr_graph=csr_graph,
+            loader_list=loader_list,
+            pre_sampler_epochs=pre_sampler_epochs,
+        )
     elif cache_policy == "Pagraph-partition":
         # TODO 未实现
         logger.info("Pagraph-partition cache policy")
         pass
     elif cache_policy == "MutilMetric-partition":
-        # TODO 未实现
         logger.info("MutilMetric-partition cache policy")
+        train_ids_list = [part_dict[i].tolist() for i in range(world_size)]
+        cache = CacheMutilMetricPartition(world_size, cache_ratio)
+        cache.generate_cache(
+            csr_graph=csr_graph,
+            train_ids_list=train_ids_list,
+            device_list=[th.device("cuda:1")],
+        )
         pass
     else:
         raise NotImplementedError
@@ -150,7 +160,7 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "yelp"
+    dataset_name = "Reddit"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
@@ -158,7 +168,7 @@ if __name__ == "__main__":
     cache_policy = "GnnLab-partition"
     partition_policy = "combined_msbfs"
     gnn_framework = "pyg"
-    repartition = True
+    repartition = False
 
     logger.info("-" * 20 + "benchmark setup" + "-" * 20)
     logger.info("dataset name: " + dataset_name)
@@ -180,7 +190,7 @@ if __name__ == "__main__":
         cache_policy=cache_policy,
         partition_policy=partition_policy,
         gnn_framework=gnn_framework,
-        repartition=True,
+        repartition=repartition,
     )
 
     logger.info("-" * 20 + "benchmark end" + "-" * 20)

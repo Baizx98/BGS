@@ -15,6 +15,7 @@ from utils import CachePagraph
 from utils import CacheGnnlab
 from utils import CacheGnnlabPartition
 from utils import CacheMutilMetric
+from utils import CacheMutilMetricPartition
 from utils import DatasetCreator
 
 dataset_root = "/home8t/bzx/data/"
@@ -62,7 +63,7 @@ def bench_naive_on_graph(
     if cache_policy == "PaGraph":
         logger.info("PaGraph cache policy")
         cache = CachePagraph(world_size, cache_ratio)
-        cache.generate_cache(csr_graph)
+        cache.generate_cache(csr_graph=csr_graph)
 
     # 基于预采样的缓存策略，每个GPU缓存同样的数据
     # GnnLab方案
@@ -70,18 +71,36 @@ def bench_naive_on_graph(
         logger.info("GnnLab cache policy")
         pre_sampler_epochs = 3
         cache = CacheGnnlab(world_size, cache_ratio)
-        cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
+        cache.generate_cache(
+            csr_graph=csr_graph,
+            loader_list=loader_list,
+            pre_sampler_epochs=pre_sampler_epochs,
+        )
     # 基于预采样的缓存策略，每个GPU缓存不同的数据
     # GnnLab-partition方案
     elif cache_policy == "GnnLab-partition":
         logger.info("GnnLab-partition cache policy")
         pre_sampler_epochs = 3
         cache = CacheGnnlabPartition(world_size, cache_ratio)
-        cache.generate_cache(csr_graph, loader_list, pre_sampler_epochs)
+        cache.generate_cache(
+            csr_graph=csr_graph,
+            loader_list=loader_list,
+            pre_sampler_epochs=pre_sampler_epochs,
+        )
     elif cache_policy == "MutilMetric":
         logger.info("MutilMetric cache policy")
         cache = CacheMutilMetric(world_size, cache_ratio)
-        cache.generate_cache(csr_graph, train_ids, th.device("cuda:1"))
+        cache.generate_cache(
+            csr_graph=csr_graph, train_ids=train_ids, device=th.device("cuda:1")
+        )
+    elif cache_policy == "MutilMetric-partition":
+        logger.info("MutilMetric-partition cache policy")
+        cache = CacheMutilMetricPartition(world_size, cache_ratio)
+        cache.generate_cache(
+            csr_graph=csr_graph,
+            train_ids_list=train_ids_list,
+            device_list=[th.device("cuda:1")],
+        )
     else:
         raise NotImplementedError
     logger.info("Cached done")
