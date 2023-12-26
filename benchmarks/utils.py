@@ -23,6 +23,96 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 
+class DataPlacement(ABC):
+    """抽象类，提供数据放置方法的接口"""
+
+    @abstractmethod
+    def generate_layout(self, **kwargs) -> list[th.Tensor]:
+        """生成每个GPU上要缓存的部分"""
+        pass
+
+
+class NaivePlacement(DataPlacement):
+    """Naive数据放置方法，针对训练集不划分的情况，每个GPU中都缓存相同的数据"""
+
+    def generate_layout(self, **kwargs):
+        """
+        生成布局列表。
+
+        参数:
+            world_size (int): 世界大小。
+            cache_size (int): 缓存大小。
+            probability (th.Tensor): 概率张量。
+            probability_list (list[th.Tensor]): 概率列表。
+
+        返回:
+            layout_list (list[list[int]]): 布局列表。
+        """
+        world_size: int = kwargs.get("world_size")
+        cache_size: int = kwargs.get("cache_size")
+        probability: th.Tensor = kwargs.get("probability")
+        probability_list: list[th.Tensor] = kwargs.get("probability_list")
+
+        # 兼容全局考虑和独自考虑
+        # 断言 probability_list 和 probability 不能同时存在，不能同时为None
+        assert probability_list is None or probability is None
+        assert not (probability_list is None and probability is None)
+
+        if probability is not None:
+            sorted_nid = th.argsort(probability, descending=True)
+            layout_list = [sorted_nid[:cache_size]] * world_size
+        elif probability_list is not None:
+            layout_list = []
+            for i in range(world_size):
+                sorted_nid = th.argsort(probability_list[i], descending=True)
+                layout_list.append(sorted_nid[:cache_size])
+        else:
+            raise NotImplementedError
+        return layout_list
+
+
+class HashPlacement(DataPlacement):
+    """哈希数据放置方法"""
+
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
+
+    def generate_layout(
+        self, access_probability_list: list[th.Tensor], **kwargs
+    ) -> list[th.Tensor]:
+        """返回每个GPU上要缓存的部分，返回world_size个tensor
+
+        Args:
+            access_probability_list (list[th.Tensor]): 不同GPU上的节点访问概率列表
+
+        Returns:
+            list[th.Tensor]: 每个GPU上缓存的节点列表
+        """
+        # TODO 实现
+        pass
+
+
+class LinearGreedyPlacement(DataPlacement):
+    """线性贪心数据放置方法"""
+
+    def __init__(self, world_size: int, cache_ratio: float) -> None:
+        super().__init__(world_size, cache_ratio)
+
+    def generate_layout(
+        self, access_probability_list: list[th.Tensor], **kwargs
+    ) -> list[th.Tensor]:
+        """返回每个GPU上要缓存的部分，返回world_size个tensor
+
+        Args:
+            access_probability_list (list[th.Tensor]): 不同GPU上的节点访问概率列表
+
+        Returns:
+            list[th.Tensor]: 每个GPU上缓存的节点列表
+        """
+        # TODO 实现
+        pass
+
+
 class Cache(ABC):
     """
     A class for caching nodes to GPU and counting hit and access count.
@@ -32,12 +122,18 @@ class Cache(ABC):
         cache_ratio (int, optional): The ratio of nodes to cache. Defaults to 0.1.
     """
 
-    def __init__(self, world_size: int, cache_ratio: int = 0.1) -> None:
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: int,
+        layout: DataPlacement,
+    ) -> None:
         self.world_size = world_size
         self.cached_ids_list = [set() for i in range(world_size)]
         self.cache_ratio = cache_ratio
+        self.layout = layout
 
-    def cache_nodes_to_gpu(self, gpu_id: int, cache_part: list):
+    def cache_nodes_to_gpu(self, cache_parts: list[th.Tensor] | list[list]):
         """
         Cache nodes to GPU.
 
@@ -45,10 +141,12 @@ class Cache(ABC):
             gpu_id (int): The ID of the GPU.
             cache_part (list): The nodes to cache.
         """
-        if isinstance(cache_part, th.Tensor):
-            cache_part = cache_part.tolist()
-        self.cached_ids_list[gpu_id].update(cache_part)
-        logger.info(str(cache_part[:10]))
+        assert self.world_size == len(cache_parts)
+        for gpu_id, cache_part in enumerate(cache_parts):
+            if isinstance(cache_part, th.Tensor):
+                cache_part = cache_part.tolist()
+            self.cached_ids_list[gpu_id].update(cache_part)
+            logger.info(str(cache_part[:10]))
 
     def hit_and_access_count(self, gpu_id: int, minibatch: list) -> (int, int):
         """
@@ -106,32 +204,26 @@ class Cache(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def generate_layout(
+        self, access_probability_list: list[th.Tensor]
+    ) -> list[th.Tensor]:
+        """生成每个GPU上要缓存的部分"""
+        raise NotImplementedError
+
+    @abstractmethod
     def generate_cache(self, **kwargs):
         """生成每个GPU上要缓存的部分"""
         raise NotImplementedError
 
 
-class DataPlacement(ABC):
-    """抽象类，提供数据放置方法的接口"""
-
-    @abstractmethod
-    def generate_layout(
-        self, access_probability_list: list[th.Tensor]
-    ) -> list[th.Tensor]:
-        """生成每个GPU上要缓存的部分"""
-        pass
-        # 在子类重写的方法中，调用数据放置方法的具体实现，这样可以在基类实现扩展，在子类中灵活使用
-        return
-
-    def linear_greedy_placement(self, **kwargs):
-        """数据放置方法的具体实现"""
-        # TODO 实现
-        pass
-
-
 class CachePagraph(Cache):
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: float,
+        layout: DataPlacement = NaivePlacement(),
+    ) -> None:
+        super().__init__(world_size, cache_ratio, layout)
 
     def generate_probability(self, **kwargs) -> th.Tensor:
         csr_graph: CSRGraph = kwargs.get("csr_graph")
@@ -153,15 +245,20 @@ class CachePagraph(Cache):
 
         cache_size = int(csr_graph.node_count * self.cache_ratio)
         probability = self.generate_probability(csr_graph=csr_graph)
-        sorted_nid = th.argsort(probability, descending=True)
-        for gpu_id in range(self.world_size):
-            self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
-        return sorted_nid
+        cached_nid_list = self.layout.generate_layout(
+            world_size=self.world_size, cache_size=cache_size, probability=probability
+        )
+        self.cache_nodes_to_gpu(cached_nid_list)
 
 
 class CacheGnnlab(Cache):
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: float,
+        layout: DataPlacement = NaivePlacement(),
+    ) -> None:
+        super().__init__(world_size, cache_ratio, layout)
 
     def generate_probability(self, **kwargs) -> th.Tensor:
         csr_graph: CSRGraph = kwargs.get("csr_graph")
@@ -196,13 +293,13 @@ class CacheGnnlab(Cache):
             loader_list=loader_list,
             pre_sampler_epoches=pre_sampler_epoches,
         )
-        sorted_nid = th.argsort(probability, descending=True)
-        for gpu_id in range(self.world_size):
-            self.cache_nodes_to_gpu(gpu_id, sorted_nid[:cache_size].tolist())
-        return sorted_nid
+        cached_nid_list = self.layout.generate_layout(
+            world_size=self.world_size, cache_size=cache_size, probability=probability
+        )
+        self.cache_nodes_to_gpu(cached_nid_list)
 
 
-class CacheGnnlabPartition(CacheGnnlab, DataPlacement):
+class CacheGnnlabPartition(CacheGnnlab):
     """
     A class for caching graph nodes on multiple GPUs using GNNLab partitioning strategy.
 
@@ -213,14 +310,15 @@ class CacheGnnlabPartition(CacheGnnlab, DataPlacement):
         cache_ratio (float): The ratio of nodes to cache on each GPU.
     """
 
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: float,
+        layout: DataPlacement = NaivePlacement(),
+    ) -> None:
+        super().__init__(world_size, cache_ratio, layout)
 
     # generate_probability方法使用父类CacheGnnlab的方法
-
-    # generate_layout
-    def generate_layout(self, access_probability_list: list[Tensor]) -> list[Tensor]:
-        return super().generate_layout(access_probability_list)
 
     def generate_cache(self, **kwargs):
         """
@@ -245,20 +343,29 @@ class CacheGnnlabPartition(CacheGnnlab, DataPlacement):
             for i in range(self.world_size)
         ]
         # 对freq_list中的每个tensor进行降序排序，返回排序后的元素的索引
-        sorted_nid_list = []
-        for i in range(self.world_size):
-            sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
+        # deprecated
+        # sorted_nid_list = []
+        # for i in range(self.world_size):
+        #     sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
+        cached_nid_list = self.layout.generate_layout(probability_list)
         # 设置每个GPU缓存节点的数量
-        for gpu_id in range(self.world_size):
-            self.cache_nodes_to_gpu(
-                gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
-            )
+        # deprecated
+        # for gpu_id in range(self.world_size):
+        #     self.cache_nodes_to_gpu(
+        #         gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
+        #     )
+        self.cache_nodes_to_gpu(cached_nid_list)
 
 
 class CacheMutilMetric(Cache):
     # TODO
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: float,
+        layout: DataPlacement = NaivePlacement(),
+    ) -> None:
+        super().__init__(world_size, cache_ratio, layout)
 
     def generate_probability(self, **kwargs) -> th.Tensor:
         csr_graph: CSRGraph = kwargs.get("csr_graph")
@@ -333,17 +440,23 @@ class CacheMutilMetric(Cache):
         probability = self.generate_probability(
             csr_graph=csr_graph, train_ids=train_ids, device=device
         )
-        sorted_nid = th.argsort(probability, descending=True)
-        for gpu_nid in range(self.world_size):
-            self.cache_nodes_to_gpu(gpu_nid, sorted_nid[:cache_size].tolist())
+        cached_nid_list = self.layout.generate_layout(
+            world_size=self.world_size, cache_size=cache_size, probability=probability
+        )
+        self.cache_nodes_to_gpu(cached_nid_list)
 
 
-class CacheMutilMetricPartition(CacheMutilMetric, DataPlacement):
+class CacheMutilMetricPartition(CacheMutilMetric):
     # TODO
     pass
 
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
+    def __init__(
+        self,
+        world_size: int,
+        cache_ratio: float,
+        layout: DataPlacement = NaivePlacement(),
+    ) -> None:
+        super().__init__(world_size, cache_ratio, layout)
 
     # generate_probability方法使用父类CacheMutilMetric的方法
 
@@ -371,11 +484,15 @@ class CacheMutilMetricPartition(CacheMutilMetric, DataPlacement):
         sorted_nid_list = []
         for i in range(self.world_size):
             sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
+
+        cached_nid_list = self.layout.generate_layout(probability_list)
+
         # 设置每个GPU缓存节点的数量
-        for gpu_id in range(self.world_size):
-            self.cache_nodes_to_gpu(
-                gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
-            )
+        # for gpu_id in range(self.world_size):
+        #     self.cache_nodes_to_gpu(
+        #         gpu_id, sorted_nid_list[gpu_id][:cache_size].tolist()
+        #     )
+        self.cache_nodes_to_gpu(cached_nid_list)
 
 
 class DatasetCreator:
