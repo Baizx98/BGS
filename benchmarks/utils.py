@@ -204,13 +204,6 @@ class Cache(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def generate_layout(
-        self, access_probability_list: list[th.Tensor]
-    ) -> list[th.Tensor]:
-        """生成每个GPU上要缓存的部分"""
-        raise NotImplementedError
-
-    @abstractmethod
     def generate_cache(self, **kwargs):
         """生成每个GPU上要缓存的部分"""
         raise NotImplementedError
