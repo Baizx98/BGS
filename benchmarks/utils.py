@@ -460,7 +460,7 @@ class CacheMutilMetricPartition(CacheMutilMetric):
     def generate_cache(self, **kwargs):
         csr_graph: CSRGraph = kwargs.get("csr_graph")
         train_ids_list: list[th.Tensor] = kwargs.get("train_ids_list")
-        device_list: th.device = kwargs.get("device", th.device("cpu"))
+        device_list: th.device = kwargs.get("device_list", th.device("cpu"))
         # TODO part_dict转为tensor的list
         # TODO gpu list需要处理，最终用多个GPU来完成
 
@@ -474,9 +474,9 @@ class CacheMutilMetricPartition(CacheMutilMetric):
             )
             for i in range(self.world_size)
         ]
-        sorted_nid_list = []
-        for i in range(self.world_size):
-            sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
+        # sorted_nid_list = []
+        # for i in range(self.world_size):
+        #     sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
 
         cached_nid_list = self.layout.generate_layout(probability_list)
 
