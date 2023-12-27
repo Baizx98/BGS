@@ -27,7 +27,9 @@ class DataPlacement(ABC):
     """抽象类，提供数据放置方法的接口"""
 
     @abstractmethod
-    def generate_layout(self, **kwargs) -> list[th.Tensor]:
+    def generate_layout(
+        self, world_size: int, cache_size: int, **kwargs
+    ) -> list[th.Tensor]:
         """生成每个GPU上要缓存的部分"""
         pass
 
@@ -35,7 +37,7 @@ class DataPlacement(ABC):
 class NaivePlacement(DataPlacement):
     """Naive数据放置方法，针对训练集不划分的情况，每个GPU中都缓存相同的数据"""
 
-    def generate_layout(self, **kwargs):
+    def generate_layout(self, world_size: int, cache_size: int, **kwargs):
         """
         生成布局列表。
 
@@ -78,7 +80,7 @@ class HashPlacement(DataPlacement):
         super().__init__(world_size, cache_ratio)
 
     def generate_layout(
-        self, access_probability_list: list[th.Tensor], **kwargs
+        self, world_size: int, cache_size: int, **kwargs
     ) -> list[th.Tensor]:
         """返回每个GPU上要缓存的部分，返回world_size个tensor
 
@@ -95,21 +97,19 @@ class HashPlacement(DataPlacement):
 class LinearGreedyPlacement(DataPlacement):
     """线性贪心数据放置方法"""
 
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
-
     def generate_layout(
-        self, access_probability_list: list[th.Tensor], **kwargs
+        self, world_size: int, cache_size: int, **kwargs
     ) -> list[th.Tensor]:
         """返回每个GPU上要缓存的部分，返回world_size个tensor
 
         Args:
-            access_probability_list (list[th.Tensor]): 不同GPU上的节点访问概率列表
+            probability_list (list[th.Tensor]): 不同GPU上的节点访问概率列表
 
         Returns:
             list[th.Tensor]: 每个GPU上缓存的节点列表
         """
         # TODO 实现
+
         pass
 
 
@@ -340,7 +340,11 @@ class CacheGnnlabPartition(CacheGnnlab):
         # sorted_nid_list = []
         # for i in range(self.world_size):
         #     sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
-        cached_nid_list = self.layout.generate_layout(probability_list)
+        cached_nid_list = self.layout.generate_layout(
+            world_size=self.world_size,
+            cache_size=cache_size,
+            probability_list=probability_list,
+        )
         # 设置每个GPU缓存节点的数量
         # deprecated
         # for gpu_id in range(self.world_size):
@@ -453,10 +457,6 @@ class CacheMutilMetricPartition(CacheMutilMetric):
 
     # generate_probability方法使用父类CacheMutilMetric的方法
 
-    # generate_layout
-    def generate_layout(self, access_probability_list: list[Tensor]) -> list[Tensor]:
-        return super().generate_layout(access_probability_list)
-
     def generate_cache(self, **kwargs):
         csr_graph: CSRGraph = kwargs.get("csr_graph")
         train_ids_list: list[th.Tensor] = kwargs.get("train_ids_list")
@@ -478,7 +478,11 @@ class CacheMutilMetricPartition(CacheMutilMetric):
         # for i in range(self.world_size):
         #     sorted_nid_list.append(th.argsort(probability_list[i], descending=True))
 
-        cached_nid_list = self.layout.generate_layout(probability_list)
+        cached_nid_list = self.layout.generate_layout(
+            world_size=self.world_size,
+            cache_size=cache_size,
+            probability_list=probability_list,
+        )
 
         # 设置每个GPU缓存节点的数量
         # for gpu_id in range(self.world_size):
