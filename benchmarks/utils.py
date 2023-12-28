@@ -50,6 +50,8 @@ class NaivePlacement(DataPlacement):
         返回:
             layout_list (list[list[int]]): 布局列表。
         """
+        logger.info("using Naive placement to generate layout")
+
         world_size: int = kwargs.get("world_size")
         cache_size: int = kwargs.get("cache_size")
         probability: th.Tensor = kwargs.get("probability")
@@ -108,9 +110,44 @@ class LinearGreedyPlacement(DataPlacement):
         Returns:
             list[th.Tensor]: 每个GPU上缓存的节点列表
         """
-        # TODO 实现
+        logger.info("using LinearGreedy placement to generate layout")
 
-        pass
+        probability_list: list[th.Tensor] = kwargs.get("probability_list")
+
+        sum_probability = th.zeros_like(probability_list[0])
+        for probability in probability_list:
+            sum_probability += probability
+        sorted_nid = th.argsort(sum_probability, descending=True)
+
+        cache_set_list = [set() for i in range(world_size)]
+        gpu_id_list = [id for id in range(world_size)]
+        """ # 多条件比较,如果cache set已满,则返回-1,否则返回概率,如果概率相同,则返回len(cache set)最小的，因为是比较最大值，所以要取反  
+            # 总之，max的key函数要返回一个包含两个元素的元祖,第一个元素是概率，第二个元素是len(cache set)的相反数
+            # 同时第一个元素要增加一个判断,如果cache set已满,则返回-1,否则返回概率
+            # 为了代码简洁,使用了lambda表达式
+            # 为了增加key函数的可读性,要添加详细的注释
+            # 函数闭包真是妙啊妙啊妙啊
+        """
+
+        def custom_compare(nid: int):
+            def compare(gpu_id: int):
+                cache_set_len = len(cache_set_list[gpu_id])
+                probability_value = (
+                    probability_list[gpu_id][nid] if cache_set_len < cache_size else -1
+                )
+                cache_set_value = -len(cache_set_list[gpu_id])
+                return probability_value, cache_set_value
+
+            return compare
+
+        for nid in sorted_nid:
+            selected_gpu_id = max(gpu_id_list, key=custom_compare(nid))
+            cache_set_list[selected_gpu_id].add(nid)
+
+        layout_list = []
+        for gpu_id in range(world_size):
+            layout_list.append(list(cache_set_list[gpu_id]))
+        return layout_list
 
 
 class Cache(ABC):
