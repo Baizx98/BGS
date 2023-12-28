@@ -622,3 +622,14 @@ def split_nodes(
         th.save(val_mask, os.path.join(dataset_path, dataset_name, "val.pt"))
         th.save(test_mask, os.path.join(dataset_path, dataset_name, "test.pt"))
     return train_mask, val_mask, test_mask
+
+
+def dataplacement_policy_creator(dataplacement_policy: str) -> DataPlacement:
+    if dataplacement_policy == "naive":
+        return NaivePlacement()
+    elif dataplacement_policy == "hash":
+        return HashPlacement()
+    elif dataplacement_policy == "linear_greedy":
+        return LinearGreedyPlacement()
+    else:
+        raise NotImplementedError
