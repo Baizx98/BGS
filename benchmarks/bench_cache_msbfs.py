@@ -28,7 +28,12 @@ def bench_linear_mbfs_on_graph(
     partition_policy: str,
     gnn_framework: str,
     repartition=True,
+    **kwargs,
 ):
+    # 处理字典参数
+    dataplacement_policy = kwargs.get("dataplacement_policy", "naive")
+    repartition = kwargs.get("repartition", True)
+
     data, csr_graph, train_ids = DatasetCreator.pyg_dataset_creator(
         dataset_name, dataset_root
     )
