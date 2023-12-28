@@ -30,6 +30,7 @@ def bench_naive_on_graph(
     cache_policy: str,
     partition_policy: str,
     gnn_framework: str,
+    **kwargs,
 ):
     data, csr_graph, train_ids = DatasetCreator.pyg_dataset_creator(
         dataset_name, dataset_root
