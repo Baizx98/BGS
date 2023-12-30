@@ -32,6 +32,8 @@ def bench_naive_on_graph(
     gnn_framework: str,
     **kwargs,
 ):
+    layout = kwargs.get("layout", "naive")
+
     data, csr_graph, train_ids = DatasetCreator.pyg_dataset_creator(
         dataset_name, dataset_root
     )
@@ -63,7 +65,7 @@ def bench_naive_on_graph(
     # PaGraph方案
     if cache_policy == "PaGraph":
         logger.info("PaGraph cache policy")
-        cache = CachePagraph(world_size, cache_ratio)
+        cache = CachePagraph(world_size, cache_ratio, layout=layout)
         cache.generate_cache(csr_graph=csr_graph)
 
     # 基于预采样的缓存策略，每个GPU缓存同样的数据
@@ -71,7 +73,7 @@ def bench_naive_on_graph(
     elif cache_policy == "GnnLab":
         logger.info("GnnLab cache policy")
         pre_sampler_epochs = 3
-        cache = CacheGnnlab(world_size, cache_ratio)
+        cache = CacheGnnlab(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph,
             loader_list=loader_list,
@@ -82,7 +84,7 @@ def bench_naive_on_graph(
     elif cache_policy == "GnnLab-partition":
         logger.info("GnnLab-partition cache policy")
         pre_sampler_epochs = 3
-        cache = CacheGnnlabPartition(world_size, cache_ratio)
+        cache = CacheGnnlabPartition(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph,
             loader_list=loader_list,
@@ -90,13 +92,13 @@ def bench_naive_on_graph(
         )
     elif cache_policy == "MutilMetric":
         logger.info("MutilMetric cache policy")
-        cache = CacheMutilMetric(world_size, cache_ratio)
+        cache = CacheMutilMetric(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph, train_ids=train_ids, device=th.device("cuda:1")
         )
     elif cache_policy == "MutilMetric-partition":
         logger.info("MutilMetric-partition cache policy")
-        cache = CacheMutilMetricPartition(world_size, cache_ratio)
+        cache = CacheMutilMetricPartition(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph,
             train_ids_list=train_ids_list,
