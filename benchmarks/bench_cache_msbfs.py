@@ -14,6 +14,7 @@ from bgs.graph import CSRGraph
 from utils import CacheGnnlabPartition
 from utils import CacheMutilMetricPartition
 from utils import DatasetCreator
+from utils import dataplacement_policy_creator
 
 dataset_root = "/home8t/bzx/data/"
 
@@ -37,6 +38,7 @@ def bench_linear_mbfs_on_graph(
     data, csr_graph, train_ids = DatasetCreator.pyg_dataset_creator(
         dataset_name, dataset_root
     )
+    layout = dataplacement_policy_creator(dataplacement_policy)
     path = (
         "/home8t/bzx/benchmark/train_partition/"
         + dataset_name
@@ -92,7 +94,7 @@ def bench_linear_mbfs_on_graph(
     if cache_policy == "GnnLab-partition":
         logger.info("GnnLab-partition cache policy")
         pre_sampler_epochs = 3
-        cache = CacheGnnlabPartition(world_size, cache_ratio)
+        cache = CacheGnnlabPartition(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph,
             loader_list=loader_list,
@@ -105,7 +107,7 @@ def bench_linear_mbfs_on_graph(
     elif cache_policy == "MutilMetric-partition":
         logger.info("MutilMetric-partition cache policy")
         train_ids_list = [part_dict[i].tolist() for i in range(world_size)]
-        cache = CacheMutilMetricPartition(world_size, cache_ratio)
+        cache = CacheMutilMetricPartition(world_size, cache_ratio, layout=layout)
         cache.generate_cache(
             csr_graph=csr_graph,
             train_ids_list=train_ids_list,
@@ -165,7 +167,7 @@ if __name__ == "__main__":
     logger.addHandler(console_handler)
 
     # benchmark setup
-    dataset_name = "Reddit"
+    dataset_name = "ogbn-products"
     world_size = 4
     batch_size = 1024
     num_neighbors = [25, 10]
@@ -174,6 +176,7 @@ if __name__ == "__main__":
     partition_policy = "combined_msbfs"
     gnn_framework = "pyg"
     repartition = False
+    dataplacement_policy = "hash"
 
     logger.info("-" * 20 + "benchmark setup" + "-" * 20)
     logger.info("dataset name: " + dataset_name)
@@ -185,6 +188,7 @@ if __name__ == "__main__":
     logger.info("partition policy: " + partition_policy)
     logger.info("gnn framework: " + gnn_framework)
     logger.info("repartition: " + str(repartition))
+    logger.info("dataplacement policy: " + str(dataplacement_policy))
 
     bench_linear_mbfs_on_graph(
         dataset_name=dataset_name,
@@ -196,6 +200,7 @@ if __name__ == "__main__":
         partition_policy=partition_policy,
         gnn_framework=gnn_framework,
         repartition=repartition,
+        dataplacement_policy=dataplacement_policy,
     )
 
     logger.info("-" * 20 + "benchmark end" + "-" * 20)
