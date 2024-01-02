@@ -76,9 +76,6 @@ class NaivePlacement(DataPlacement):
 class HashPlacement(DataPlacement):
     """哈希数据放置方法"""
 
-    def __init__(self, world_size: int, cache_ratio: float) -> None:
-        super().__init__(world_size, cache_ratio)
-
     def generate_layout(
         self, world_size: int, cache_size: int, **kwargs
     ) -> list[th.Tensor]:
@@ -168,6 +165,26 @@ class LinearGreedyPlacement(DataPlacement):
         return layout_list
 
 
+class HeuristicRedundantDataplacement(DataPlacement):
+    """基于启发式的冗余数据放置方法"""
+
+    def generate_layout(
+        self, world_size: int, cache_size: int, **kwargs
+    ) -> list[Tensor]:
+        """Generate a layout of nodes to cache on each GPU.
+
+        Args:
+            world_size (int): The number of GPUs.
+            cache_size (int): The number of nodes to cache on each GPU.
+
+        Returns:
+            list[Tensor]: A list of tensors containing the nodes to cache on each GPU.
+        """
+        logger.info("using HeuristicRedundant placement to generate layout")
+
+        return super().generate_layout(world_size, cache_size, **kwargs)
+
+
 class Cache(ABC):
     """
     A class for caching nodes to GPU and counting hit and access count.
@@ -200,6 +217,8 @@ class Cache(ABC):
         for gpu_id, cache_part in enumerate(cache_parts):
             if isinstance(cache_part, th.Tensor):
                 cache_part = cache_part.tolist()
+            if isinstance(cache_part[0], th.Tensor):
+                cache_part = [x.item() for x in cache_part]
             self.cached_ids_list[gpu_id].update(cache_part)
             logger.info(str(cache_part[:10]))
 
@@ -247,6 +266,14 @@ class Cache(ABC):
 
     # 计算GPU上缓存节点的冗余度
     def get_reduncy(self, node_count) -> float:
+        """计算冗余度
+
+        Args:
+            node_count (int): 总节点数
+
+        Returns:
+            float: 冗余度，范围从1到world_size，越大冗余度越高
+        """
         all_cached_ids = set()
         for i in range(self.world_size):
             all_cached_ids.update(self.cached_ids_list[i])
