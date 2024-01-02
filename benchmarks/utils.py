@@ -52,8 +52,6 @@ class NaivePlacement(DataPlacement):
         """
         logger.info("using Naive placement to generate layout")
 
-        world_size: int = kwargs.get("world_size")
-        cache_size: int = kwargs.get("cache_size")
         probability: th.Tensor = kwargs.get("probability")
         probability_list: list[th.Tensor] = kwargs.get("probability_list")
 
@@ -93,7 +91,27 @@ class HashPlacement(DataPlacement):
             list[th.Tensor]: 每个GPU上缓存的节点列表
         """
         # TODO 实现
-        pass
+        # 考虑分区和不分区两种实现方式，probability_list和probability不能同时存在
+        logger.info("using Hash placement to generate layout")
+        probability: th.Tensor = kwargs.get("probability")
+        probability_list: list[th.Tensor] = kwargs.get("probability_list")
+
+        assert probability_list is None or probability is None
+        assert not (probability_list is None and probability is None)
+
+        if probability is not None:
+            sorted_nid = th.argsort(probability, descending=True)
+        elif probability_list is not None:
+            sum_probability = th.zeros_like(probability_list[0])
+            for probability in probability_list:
+                sum_probability += probability
+            sorted_nid = th.argsort(sum_probability, descending=True)
+        layout_list = []
+        for gpu_id in range(world_size):
+            layout_list.append(
+                sorted_nid[gpu_id : cache_size * world_size : world_size]
+            )
+        return layout_list
 
 
 class LinearGreedyPlacement(DataPlacement):
