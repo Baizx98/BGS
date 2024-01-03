@@ -173,6 +173,13 @@ class HeuristicRedundantDataplacement(DataPlacement):
         self, world_size: int, cache_size: int, **kwargs
     ) -> list[Tensor]:
         """Generate a layout of nodes to cache on each GPU.
+        1. 为每个GPU设置一个分数，分数为当前GPU上节点访问开销的期望
+        2. 从空状态开始初始化，每次迭代选择一个分数最大的GPU，将其cpu set中的一个节点移动到local set中
+        3. 同时更新其他GPU的nvlink set和sum、score
+        4. 从该GPU的cpu set中选择节点后，要判断该节点是否nvlink set中，如果是，要判断是否需要添加这个冗余节点到local set中
+        5. 如果都没有添加，就直接将这个节点添加到local set中，同时更新其他GPU的nvlink set和sum、score
+
+        - 整个
 
         Args:
             world_size (int): The number of GPUs.
@@ -206,6 +213,16 @@ class HeuristicRedundantDataplacement(DataPlacement):
         node_local_set_list = [set() for _ in range(world_size)]
         # cpu & (nvlink | local) =full
         # nvlink & local != empty
+        local_p_sum_list = [0 for _ in range(world_size)]
+        nvlink_p_sum_list = [0 for _ in range(world_size)]
+        cpu_p_sum_list = [0 for _ in range(world_size)]
+
+        left_pointer_list = [0 for _ in range(world_size)]
+        right_pointer_list = [0 for _ in range(world_size)]
+
+        # 每个GPU上用于替换冗余节点的候选节点列表，naive方法中的非冗余节点+sorted_nid_list[gpu_id][cache_size:world_size*cache_size]
+        # 其中每个元素的长度不同，但都大于(world_size-1)*cache_size,小于world_size*cache_size
+        candidate_nodes_list = [[] for _ in range(world_size)]
 
         return None
 
