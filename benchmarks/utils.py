@@ -155,7 +155,8 @@ class LinearGreedyPlacement(DataPlacement):
 
             return compare
 
-        for nid in sorted_nid:
+        for i in range(cache_size * world_size):
+            nid = sorted_nid[i]
             selected_gpu_id = max(gpu_id_list, key=custom_compare(nid))
             cache_set_list[selected_gpu_id].add(nid)
 
@@ -182,7 +183,31 @@ class HeuristicRedundantDataplacement(DataPlacement):
         """
         logger.info("using HeuristicRedundant placement to generate layout")
 
-        return super().generate_layout(world_size, cache_size, **kwargs)
+        probability_list: list[th.Tensor] = kwargs.get("probability_list")
+        assert probability_list is not None
+
+        node_count = probability_list[0].shape[0]
+
+        sorted_nid_list = [
+            th.argsort(probability, descending=True).tolist()
+            for probability in probability_list
+        ]
+        # 记录每个GPU上节点访问开销的期望
+        score_list = [0 for _ in range(world_size)]
+
+        # 对score list排序返回索引，不改变源list
+        # 只是暂时把这个语句放在了这里
+        sorted_score_index_list = sorted(range(world_size), key=lambda x: score_list[x])
+        #
+        # 注意操作的元素为int，而不是tensor
+        # 集合初始化，初始全部节点均在CPU上
+        node_cpu_set_list = [set(range(node_count)) for _ in range(world_size)]
+        node_nvlink_set_list = [set() for _ in range(world_size)]
+        node_local_set_list = [set() for _ in range(world_size)]
+        # cpu & (nvlink | local) =full
+        # nvlink & local != empty
+
+        return None
 
 
 class Cache(ABC):
