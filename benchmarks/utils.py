@@ -167,7 +167,8 @@ class LinearGreedyPlacement(DataPlacement):
 
 
 class HeuristicRedundantDataplacement(DataPlacement):
-    """基于启发式的冗余数据放置方法"""
+    """基于启发式的冗余数据放置方法
+    从零开始构造带有一定冗余的缓存布局"""
 
     def generate_layout(
         self, world_size: int, cache_size: int, **kwargs
@@ -225,6 +226,23 @@ class HeuristicRedundantDataplacement(DataPlacement):
         candidate_nodes_list = [[] for _ in range(world_size)]
 
         return None
+
+
+class RemoveRedundancyDataplacement(DataPlacement):
+    """先使用naive方法初始化cache，再进行迭代来去除部分冗余
+    去除冗余时，要从已缓存的节点中概率最小的冗余节点开始去除
+    """
+
+    def generate_layout(
+        self, world_size: int, cache_size: int, **kwargs
+    ) -> list[Tensor]:
+        return super().generate_layout(world_size, cache_size, **kwargs)
+
+
+class AddRedundancyDataplacement(DataPlacement):
+    """先使用轮转贪心的方式初始化cache，再从nvlink set中选择概率最大的节点添加到本地冗余，同时弹出local set末尾的节点
+    应该关注被弹出的节点是否在其他GPU的nvlink set中，如果在的话，弹出该节点会影响其他GPU的开销分数，如果不在，可以直接弹出
+    轮转贪心时，每次都选择开销最大的GPU，将其cpu set中的第一个节点加入local set"""
 
 
 class Cache(ABC):
