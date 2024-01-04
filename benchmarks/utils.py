@@ -236,6 +236,12 @@ class RemoveRedundancyDataplacement(DataPlacement):
     def generate_layout(
         self, world_size: int, cache_size: int, **kwargs
     ) -> list[Tensor]:
+        probability_list: list[th.Tensor] = kwargs.get("probability_list")
+        assert probability_list is not None
+        sorted_nid_list = [
+            th.argsort(probability, descending=True) for probability in probability_list
+        ]
+        pass
         return super().generate_layout(world_size, cache_size, **kwargs)
 
 
@@ -243,6 +249,19 @@ class AddRedundancyDataplacement(DataPlacement):
     """先使用轮转贪心的方式初始化cache，再从nvlink set中选择概率最大的节点添加到本地冗余，同时弹出local set末尾的节点
     应该关注被弹出的节点是否在其他GPU的nvlink set中，如果在的话，弹出该节点会影响其他GPU的开销分数，如果不在，可以直接弹出
     轮转贪心时，每次都选择开销最大的GPU，将其cpu set中的第一个节点加入local set"""
+
+    def generate_layout(
+        self, world_size: int, cache_size: int, **kwargs
+    ) -> list[Tensor]:
+        """1. 为每个GPU维护一个分数表示访存开销，每轮开始前根据分数对GPU进行升序排序
+        2. 每轮选择开销最大的GPU，将其cpu set中的第一个符合条件的节点加入local set，更新分数
+        3. 每次选择加入节点时，要判断该节点是否已经被添加到其它GPU的cache中，如果是的话就跳过，继续寻找下一个节点，同时更新nvlink分数
+        4. 遍历完一轮后，根据分数重新排序，如果缓存已满，就break，否则继续下一轮
+        5. 理论上所有GPU的缓存应该在同一轮中同时变满
+        - 分数的设置应该与本GPU的已缓存节点概率和加上nvlink权重因子乘以nvlink set中的节点概率和相关
+        - nvlink权重因子的设定要取决于经验了
+        - 还要考虑子图大小，子图大小和概率共同决定了数据传输量"""
+        return
 
 
 class Cache(ABC):
